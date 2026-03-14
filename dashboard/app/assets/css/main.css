@@ -1,0 +1,62 @@
+@import "tailwindcss" theme(static);
+@import "@nuxt/ui";
+
+@theme static {
+  --font-sans: 'Public Sans', sans-serif;
+
+  --color-neutral-50: #fafafa;
+  --color-neutral-100: #f5f5f5;
+  --color-neutral-200: #e5e5e5;
+  --color-neutral-300: #d4d4d4;
+  --color-neutral-400: #a3a3a3;
+  --color-neutral-500: #737373;
+  --color-neutral-600: #525252;
+  --color-neutral-700: #404040;
+  --color-neutral-800: #262626;
+  --color-neutral-900: #171717;
+  --color-neutral-950: #0a0a0a;
+}
+
+:root {
+  --ui-primary: black;
+
+  --ui-bg: white;
+  --ui-bg-muted: #fafafa;
+  --ui-bg-elevated: #f5f5f5;
+  --ui-bg-accented: #e5e5e5;
+  --ui-bg-inverted: #0a0a0a;
+
+  --ui-text-dimmed: #a3a3a3;
+  --ui-text-muted: #737373;
+  --ui-text-toned: #525252;
+  --ui-text: #171717;
+  --ui-text-highlighted: black;
+  --ui-text-inverted: white;
+
+  --ui-border: #e5e5e5;
+  --ui-border-muted: #f5f5f5;
+  --ui-border-accented: #d4d4d4;
+  --ui-border-inverted: black;
+}
+
+.dark {
+  --ui-primary: white;
+
+  --ui-bg: #0a0a0a;
+  --ui-bg-muted: #171717;
+  --ui-bg-elevated: #171717;
+  --ui-bg-accented: #262626;
+  --ui-bg-inverted: white;
+
+  --ui-text-dimmed: #737373;
+  --ui-text-muted: #a3a3a3;
+  --ui-text-toned: #d4d4d4;
+  --ui-text: #f5f5f5;
+  --ui-text-highlighted: white;
+  --ui-text-inverted: #0a0a0a;
+
+  --ui-border: #262626;
+  --ui-border-muted: #262626;
+  --ui-border-accented: #404040;
+  --ui-border-inverted: white;
+}

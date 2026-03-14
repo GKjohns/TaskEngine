@@ -1,0 +1,37 @@
+{
+  "name": "task-engine-dashboard",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build",
+    "predev": "kill-port 3000 8288 8289 50052 50053",
+    "dev": "concurrently --kill-others-on-fail --names \"nuxt,inngest\" --prefix-colors \"blue.bold,magenta.bold\" \"npm:dev:nuxt\" \"npm:dev:inngest\"",
+    "dev:nuxt": "NODE_OPTIONS=--max-old-space-size=4096 nuxt dev --port 3000",
+    "dev:inngest": "npx --yes --ignore-scripts=false inngest-cli@latest dev --no-discovery",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "lint": "eslint .",
+    "typecheck": "nuxt typecheck"
+  },
+  "dependencies": {
+    "@iconify-json/lucide": "^1.2.96",
+    "@nuxt/ui": "^4.5.1",
+    "@supabase/supabase-js": "^2.56.1",
+    "@vueuse/core": "^14.2.1",
+    "@vueuse/nuxt": "^14.2.1",
+    "inngest": "^3.40.0",
+    "nuxt": "^4.3.1",
+    "openai": "^6.6.0",
+    "tailwindcss": "^4.2.1",
+    "vue": "^3.5.29",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@nuxt/eslint": "^1.15.2",
+    "concurrently": "^9.2.1",
+    "eslint": "^10.0.3",
+    "kill-port": "^2.0.1",
+    "typescript": "^5.9.3",
+    "vue-tsc": "^3.2.5"
+  }
+}
