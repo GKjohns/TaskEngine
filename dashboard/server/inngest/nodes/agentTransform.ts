@@ -5,6 +5,7 @@ import { agentTransformTools } from './tools'
 import type { NodeExecutor } from './types'
 
 const MODEL = 'gpt-5.4'
+const AGENT_LOOP_TIMEOUT_MS = 120_000
 
 function buildInstructions(prompt: string | null) {
   return [
@@ -15,6 +16,17 @@ function buildInstructions(prompt: string | null) {
   ].join('\n\n')
 }
 
+async function runAgentLoopWithTimeout<T>(promise: Promise<T>) {
+  return await Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`Agent transform node timed out after ${Math.round(AGENT_LOOP_TIMEOUT_MS / 1000)} seconds`))
+      }, AGENT_LOOP_TIMEOUT_MS)
+    })
+  ])
+}
+
 export const agentTransform: NodeExecutor = async (node, context) => {
   if (node.per_artifact && context.inputArtifacts.length > 0) {
     const artifacts = []
@@ -22,7 +34,7 @@ export const agentTransform: NodeExecutor = async (node, context) => {
     const descriptions: string[] = []
 
     for (const artifact of context.inputArtifacts) {
-      const result = await runAgentLoop({
+      const result = await runAgentLoopWithTimeout(runAgentLoop({
         model: MODEL,
         instructions: buildInstructions(node.prompt),
         input: renderArtifactInput(artifact),
@@ -30,7 +42,7 @@ export const agentTransform: NodeExecutor = async (node, context) => {
         maxIterations: 10,
         reasoning: { effort: 'high' },
         context
-      })
+      }))
 
       const desc = describeAgentResult(result.output)
       artifacts.push({
@@ -68,7 +80,7 @@ export const agentTransform: NodeExecutor = async (node, context) => {
     ? joinArtifactInputs(context.inputArtifacts)
     : (node.prompt || '')
 
-  const result = await runAgentLoop({
+  const result = await runAgentLoopWithTimeout(runAgentLoop({
     model: MODEL,
     instructions: buildInstructions(node.prompt),
     input: inputText,
@@ -76,7 +88,7 @@ export const agentTransform: NodeExecutor = async (node, context) => {
     maxIterations: 10,
     reasoning: { effort: 'high' },
     context
-  })
+  }))
 
   const description = describeAgentResult(result.output)
 

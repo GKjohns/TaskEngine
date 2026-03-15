@@ -66,12 +66,15 @@ export const executeRun = inngest.createFunction(
   { id: 'execute-run', retries: 0 },
   { event: 'task-engine/run.start' },
   async ({ event, step }) => {
-    const { runId, planId, taskId, jobId } = event.data as {
+    const { runId, planId, taskId, jobId, inputArtifactIds: rawInputArtifactIds } = event.data as {
       runId: string
       planId: string
       taskId: string
       jobId: string | null
+      inputArtifactIds?: string[]
     }
+
+    const runInputArtifactIds = Array.isArray(rawInputArtifactIds) ? rawInputArtifactIds : []
 
     const nodeStates: Record<string, NodeState> = {}
 
@@ -198,6 +201,19 @@ export const executeRun = inngest.createFunction(
 
                 inputArtifacts = artifacts || []
               }
+            } else if (runInputArtifactIds.length > 0) {
+              inputArtifactIds = runInputArtifactIds
+
+              const { data: artifacts, error: artifactError } = await supabase
+                .from('artifacts')
+                .select('id, title, content, type, metadata_json, storage_path')
+                .in('id', runInputArtifactIds)
+
+              if (artifactError) {
+                throw new Error(artifactError.message)
+              }
+
+              inputArtifacts = artifacts || []
             }
 
             const inputUpdate = await supabase

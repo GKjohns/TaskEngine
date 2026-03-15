@@ -53,19 +53,26 @@ export interface TaskRecord {
   id: string
   title: string
   prompt: string
+  plan_id: string | null
   trigger_type: TaskTriggerType
   schedule_config: Record<string, unknown>
   status: TaskStatus
+  input_artifact_ids: string[]
   created_at: string
   updated_at?: string
 }
 
 export interface PlanRecord {
   id: string
-  task_id: string
+  title: string
+  description: string | null
+  prompt: string | null
+  task_id: string | null
   plan_json: Plan
   version: number
+  created_by: string | null
   created_at: string
+  updated_at: string
 }
 
 export interface JobRecord {

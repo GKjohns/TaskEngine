@@ -59,12 +59,16 @@ const STRUCTURE_SCHEMA: ResponseFormatTextJSONSchemaConfig = {
 
 const STRUCTURE_INSTRUCTIONS = `You are a plan generator for Task Engine, a runtime that executes text-based work as directed acyclic graphs of nodes.
 
-Given a user's task description, generate a high-level execution plan as a JSON object with a "nodes" array. Each node has:
+A plan is a reusable workflow template. Given a description of the desired workflow, generate a high-level execution plan as a JSON object with a "nodes" array. Each node has:
 - id: a short, descriptive snake_case identifier
 - type: one of the available node types
-- description: one sentence explaining what this node does and why
+- description: one sentence explaining what this node does and why. Write descriptions generically so the plan can be reused with different input data.
 - per_artifact: whether this node should process each input artifact individually (true) or all at once (false). Set to true when each artifact needs independent processing. Set to false when the node needs to see all inputs together.
 - depends_on: array of node ids that must complete before this node runs
+
+The user selects input artifacts when creating a task. These are automatically fed to root nodes (nodes with empty depends_on). Do NOT create retrieve nodes just to load the user's input data — that is handled automatically. Start the plan with the first processing step.
+
+Only use retrieve nodes when the plan genuinely needs to dynamically search for or fetch additional context beyond the user's explicit inputs (e.g., "find related documents", "search for recent entries matching a criteria").
 
 Available node types:
 
@@ -79,14 +83,14 @@ SIMPLE LLM NODES:
 - llm_transform: rewriting, formatting, translation
 
 INFRASTRUCTURE NODES:
-- retrieve: fetch artifacts by reference or query
+- retrieve: dynamically search for or fetch additional context (NOT for loading the user's input artifacts)
 - branch: conditional routing based on previous output
 - wait: pause for a duration
 - review: pause for human review
 - emit: write an artifact to storage
 - notify: log a message or send notification
 
-Choose agent nodes for tasks requiring judgment, multi-step reasoning, or research. Choose simple LLM nodes for straightforward transforms where a single prompt-in/result-out call suffices. Use infrastructure nodes only when they clearly add value.
+Choose agent nodes for work requiring judgment, multi-step reasoning, or research. Choose simple LLM nodes for straightforward transforms where a single prompt-in/result-out call suffices. Use infrastructure nodes only when they clearly add value.
 
 The plan should be minimal. Prefer fewer, more capable nodes over many granular ones.`
 
@@ -267,7 +271,7 @@ const NODE_CONFIG_SCHEMAS: Record<PlanNodeType, ResponseFormatTextJSONSchemaConf
 
 const NODE_CONFIG_INSTRUCTIONS = `You are filling in the configuration for a single node in a Task Engine execution plan.
 
-Given the node's type, description, and the overall task context, generate the fields for this node. Be specific in prompts. Write the actual instructions the downstream model or runtime should use.`
+Given the node's type, description, and the overall workflow context, generate the fields for this node. Be specific in prompts. Write the actual instructions the downstream model or runtime should use. Keep prompts generic enough that the plan can be reused with different input data.`
 
 function getResponseText(response: Response) {
   if (response.output_text) {
@@ -277,11 +281,11 @@ function getResponseText(response: Response) {
   throw new Error('OpenAI response did not include structured output text')
 }
 
-export async function generatePlan(openai: OpenAI, taskPrompt: string): Promise<Plan> {
+export async function generatePlan(openai: OpenAI, prompt: string): Promise<Plan> {
   const structureResponse = await openai.responses.create({
     model: 'gpt-5.4',
     instructions: STRUCTURE_INSTRUCTIONS,
-    input: taskPrompt,
+    input: prompt,
     reasoning: { effort: 'high' },
     text: { format: STRUCTURE_SCHEMA }
   })
@@ -293,7 +297,7 @@ export async function generatePlan(openai: OpenAI, taskPrompt: string): Promise<
       model: 'gpt-5-mini',
       instructions: NODE_CONFIG_INSTRUCTIONS,
       input: [
-        `Task: ${taskPrompt}`,
+        `Workflow: ${prompt}`,
         `Node ID: ${node.id}`,
         `Node type: ${node.type}`,
         `Description: ${node.description}`,

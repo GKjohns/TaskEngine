@@ -32,15 +32,18 @@ const visibleArtifacts = computed(() => (data.value || []).filter((artifact) => 
           </p>
         </div>
 
-        <UButton
-          color="neutral"
-          variant="soft"
-          icon="i-lucide-refresh-cw"
-          :loading="status === 'pending'"
-          @click="refresh()"
-        >
-          Refresh
-        </UButton>
+        <div class="flex items-center gap-2">
+          <UButton
+            color="neutral"
+            variant="soft"
+            icon="i-lucide-refresh-cw"
+            :loading="status === 'pending'"
+            @click="refresh()"
+          >
+            Refresh
+          </UButton>
+          <UploadArtifactModal @created="refresh()" />
+        </div>
       </div>
 
       <div class="grid gap-3 lg:grid-cols-2">

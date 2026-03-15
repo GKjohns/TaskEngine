@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import type { JobRecord, PlanRecord, RunRecord, TaskRecord } from '../../../shared/types/task-engine'
+import type { ArtifactRecord, JobRecord, PlanRecord, RunRecord, TaskRecord } from '../../../shared/types/task-engine'
 import {
+  artifactTypeColorMap,
   formatDateTime,
   formatDuration,
   formatRelativeTime,
@@ -10,9 +11,11 @@ import {
 } from '../../utils/taskEngine'
 
 interface TaskDetail extends TaskRecord {
+  current_plan?: Pick<PlanRecord, 'id' | 'title' | 'plan_json' | 'version' | 'created_at'> | null
   plans?: PlanRecord[]
   runs?: RunRecord[]
   jobs?: Array<Pick<JobRecord, 'id' | 'job_type' | 'status' | 'next_run_at' | 'last_run_at' | 'last_error'>>
+  latest_output_artifact?: ArtifactRecord | null
 }
 
 const route = useRoute()
@@ -35,17 +38,34 @@ const pageError = ref('')
 const selectedNodeId = ref<string | null>(null)
 
 const task = computed(() => data.value)
+
+const taskArtifactIds = computed(() => {
+  const ids = task.value?.input_artifact_ids
+  return Array.isArray(ids) ? ids : []
+})
+
+const { data: inputArtifacts } = useLazyFetch<ArtifactRecord[]>('/api/artifacts', {
+  default: () => [],
+  transform: (all: ArtifactRecord[]) => all.filter(a => taskArtifactIds.value.includes(a.id)),
+  watch: [taskArtifactIds]
+})
+
+const activePlan = computed(() => {
+  if (task.value?.current_plan) return task.value.current_plan
+  const plans = [...(task.value?.plans || [])].sort((a, b) => b.version - a.version)
+  return plans[0] ?? null
+})
+
 const plans = computed(() => [...(task.value?.plans || [])].sort((a, b) => b.version - a.version))
-const latestPlan = computed(() => plans.value[0] ?? null)
 const runs = computed(() => [...(task.value?.runs || [])].sort((a, b) => {
   const aTime = a.started_at ? new Date(a.started_at).getTime() : 0
   const bTime = b.started_at ? new Date(b.started_at).getTime() : 0
   return bTime - aTime
 }))
 const jobs = computed(() => task.value?.jobs || [])
-const selectedNode = computed(() => latestPlan.value?.plan_json.nodes.find(node => node.id === selectedNodeId.value) || latestPlan.value?.plan_json.nodes[0] || null)
+const selectedNode = computed(() => activePlan.value?.plan_json.nodes.find(node => node.id === selectedNodeId.value) || activePlan.value?.plan_json.nodes[0] || null)
 
-watch(latestPlan, (plan) => {
+watch(activePlan, (plan) => {
   if (!plan) {
     selectedNodeId.value = null
     return
@@ -72,24 +92,9 @@ async function replanTask() {
   }
 }
 
-async function startRun() {
-  actionPending.value = true
-  pageError.value = ''
-
-  try {
-    const run = await $fetch<RunRecord>('/api/runs', {
-      method: 'POST',
-      body: {
-        task_id: taskId.value
-      }
-    })
-    await refresh()
-    await router.push(`/runs/${run.id}`)
-  } catch (error) {
-    pageError.value = error instanceof Error ? error.message : 'Failed to start a run.'
-  } finally {
-    actionPending.value = false
-  }
+async function onRunStarted(run: RunRecord) {
+  await refresh()
+  await router.push(`/runs/${run.id}`)
 }
 
 async function updateTaskStatus(nextStatus: TaskRecord['status']) {
@@ -122,12 +127,21 @@ async function updateTaskStatus(nextStatus: TaskRecord['status']) {
             <UBadge v-if="task" :color="triggerColorMap[task.trigger_type]" variant="subtle">
               {{ task.trigger_type }}
             </UBadge>
-            <UBadge color="neutral" variant="outline">
-              {{ latestPlan ? `Latest plan v${latestPlan.version}` : 'No plan yet' }}
+            <NuxtLink
+              v-if="activePlan"
+              :to="`/plans/${activePlan.id}`"
+              class="hover:opacity-80 transition"
+            >
+              <UBadge color="primary" variant="outline">
+                {{ activePlan.title || `Plan v${activePlan.version}` }}
+              </UBadge>
+            </NuxtLink>
+            <UBadge v-else color="neutral" variant="outline">
+              No plan yet
             </UBadge>
           </div>
           <p class="text-sm text-muted">
-            Task detail combines the prompt, current plan, job status, and recent run history in one place.
+            Task detail with current plan, scheduling, and run history.
           </p>
         </div>
 
@@ -141,15 +155,12 @@ async function updateTaskStatus(nextStatus: TaskRecord['status']) {
           >
             Refresh
           </UButton>
-          <UButton
-            color="primary"
-            icon="i-lucide-play"
-            :loading="actionPending"
-            :disabled="!latestPlan"
-            @click="startRun"
-          >
-            Run now
-          </UButton>
+          <RunTaskModal
+            :task-id="taskId"
+            :task-artifact-ids="taskArtifactIds"
+            :disabled="!activePlan"
+            @started="onRunStarted"
+          />
           <UButton icon="i-lucide-sparkles" :loading="replanPending" @click="replanTask">
             Replan
           </UButton>
@@ -205,11 +216,53 @@ async function updateTaskStatus(nextStatus: TaskRecord['status']) {
               Task prompt
             </h2>
             <p class="mt-1 text-sm text-muted">
-              The natural-language request that produced the task and current plan.
+              The natural-language request that produced this task.
             </p>
           </div>
 
           <ContentRenderer :content="task.prompt" />
+        </div>
+      </UCard>
+
+      <UCard v-if="inputArtifacts?.length" class="border border-default">
+        <div class="space-y-4">
+          <div>
+            <h2 class="text-base font-semibold text-highlighted">
+              Input artifacts
+            </h2>
+            <p class="mt-1 text-sm text-muted">
+              Data fed into this task's plan on each run.
+            </p>
+          </div>
+
+          <div class="flex flex-wrap gap-2">
+            <NuxtLink
+              v-for="artifact in inputArtifacts"
+              :key="artifact.id"
+              :to="`/artifacts/${artifact.id}`"
+              class="flex items-center gap-2 rounded-lg border border-default px-3 py-2 transition hover:border-primary/50 hover:bg-elevated/60"
+            >
+              <UBadge :color="artifactTypeColorMap[artifact.type]" variant="soft" size="xs">
+                {{ artifact.type }}
+              </UBadge>
+              <span class="text-sm font-medium text-highlighted">{{ artifact.title }}</span>
+            </NuxtLink>
+          </div>
+        </div>
+      </UCard>
+
+      <UCard v-if="task?.latest_output_artifact" class="border border-default">
+        <div class="space-y-4">
+          <div>
+            <h2 class="text-base font-semibold text-highlighted">
+              Latest completed output
+            </h2>
+            <p class="mt-1 text-sm text-muted">
+              Most recent artifact generated by a completed run for this task.
+            </p>
+          </div>
+
+          <ArtifactPreview :artifact="task.latest_output_artifact" />
         </div>
       </UCard>
 
@@ -241,10 +294,17 @@ async function updateTaskStatus(nextStatus: TaskRecord['status']) {
               </div>
               <div>
                 <p class="font-medium text-highlighted">
-                  Plan versions
+                  Plan
                 </p>
-                <p class="text-muted">
-                  {{ plans.length }}
+                <NuxtLink
+                  v-if="activePlan"
+                  :to="`/plans/${activePlan.id}`"
+                  class="text-primary hover:underline"
+                >
+                  {{ activePlan.title || `v${activePlan.version}` }}
+                </NuxtLink>
+                <p v-else class="text-muted">
+                  None
                 </p>
               </div>
               <div>
@@ -263,7 +323,7 @@ async function updateTaskStatus(nextStatus: TaskRecord['status']) {
           <div class="space-y-4">
             <div>
               <h2 class="text-base font-semibold text-highlighted">
-                Jobs
+                Scheduling
               </h2>
             </div>
 
@@ -298,7 +358,7 @@ async function updateTaskStatus(nextStatus: TaskRecord['status']) {
         </UCard>
       </div>
 
-      <div v-if="latestPlan" class="grid gap-4 xl:grid-cols-[1fr,0.9fr]">
+      <div v-if="activePlan" class="grid gap-4 xl:grid-cols-[1fr,0.9fr]">
         <UCard class="border border-default">
           <div class="space-y-5">
             <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -307,16 +367,19 @@ async function updateTaskStatus(nextStatus: TaskRecord['status']) {
                   Plan graph
                 </h2>
                 <p class="mt-1 text-sm text-muted">
-                  The latest stored execution plan, including whether each node runs per artifact or in batch mode.
+                  Current execution plan.
+                  <NuxtLink :to="`/plans/${activePlan.id}`" class="text-primary hover:underline">
+                    View full plan
+                  </NuxtLink>
                 </p>
               </div>
               <UBadge color="neutral" variant="outline">
-                {{ formatDateTime(latestPlan.created_at) }}
+                {{ formatDateTime(activePlan.created_at) }}
               </UBadge>
             </div>
 
             <PlanGraph
-              :nodes="latestPlan.plan_json.nodes"
+              :nodes="activePlan.plan_json.nodes"
               :active-node-id="selectedNodeId"
               @select="selectedNodeId = $event"
             />

@@ -13,21 +13,41 @@ interface TriggerRunResult {
 export async function createPendingRunForTask(
   client: ServiceClient,
   taskId: string,
-  preferredJobId?: string | null
+  preferredJobId?: string | null,
+  inputArtifactIds?: string[]
 ): Promise<TriggerRunResult> {
-  const { data: plan, error: planError } = await client
-    .from('plans')
-    .select('id')
-    .eq('task_id', taskId)
-    .order('version', { ascending: false })
-    .limit(1)
+  const { data: task, error: taskError } = await client
+    .from('tasks')
+    .select('plan_id, input_artifact_ids')
+    .eq('id', taskId)
     .single()
 
-  if (planError || !plan) {
+  if (taskError || !task) {
     throw createError({
-      statusCode: 400,
-      statusMessage: 'No plan exists for this task'
+      statusCode: 404,
+      statusMessage: 'Task not found'
     })
+  }
+
+  let planId = task.plan_id
+
+  if (!planId) {
+    const { data: plan, error: planError } = await client
+      .from('plans')
+      .select('id')
+      .eq('task_id', taskId)
+      .order('version', { ascending: false })
+      .limit(1)
+      .single()
+
+    if (planError || !plan) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'No plan exists for this task'
+      })
+    }
+
+    planId = plan.id
   }
 
   let jobId = preferredJobId ?? null
@@ -51,13 +71,18 @@ export async function createPendingRunForTask(
     jobId = job?.id || null
   }
 
+  const resolvedArtifactIds = inputArtifactIds?.length
+    ? inputArtifactIds
+    : (Array.isArray(task.input_artifact_ids) ? task.input_artifact_ids as string[] : [])
+
   const { data: run, error: runError } = await client
     .from('runs')
     .insert({
       task_id: taskId,
-      plan_id: plan.id,
+      plan_id: planId,
       job_id: jobId,
-      status: 'pending'
+      status: 'pending',
+      input_artifact_ids: resolvedArtifactIds
     })
     .select()
     .single()
@@ -73,7 +98,7 @@ export async function createPendingRunForTask(
 
   return {
     run: createdRun,
-    planId: plan.id,
+    planId,
     jobId
   }
 }
@@ -83,6 +108,7 @@ export async function sendRunStartEvent(input: {
   planId: string
   taskId: string
   jobId: string | null
+  inputArtifactIds?: string[]
 }) {
   await inngest.send({
     name: 'task-engine/run.start',

@@ -16,21 +16,69 @@ const createTaskSchema = z.object({
   prompt: z.string().trim().min(1),
   trigger_type: z.enum(['manual', 'scheduled', 'heartbeat']).default('manual'),
   schedule_config: z.record(z.string(), z.unknown()).default({}),
-  plan_json: planPreviewSchema.optional()
+  plan_id: z.string().uuid().optional(),
+  plan_json: planPreviewSchema.optional(),
+  input_artifact_ids: z.array(z.string().uuid()).default([])
 })
 
 export default defineEventHandler(async (event) => {
   const body = await readValidatedBody(event, createTaskSchema)
   const client = createServiceClient()
-  const openai = body.plan_json ? null : useOpenAI()
+
+  let planId = body.plan_id || null
+  let plan = null
+  let validationErrors: string[] = []
+
+  if (planId) {
+    const { data: existing, error: existingError } = await client
+      .from('plans')
+      .select('*')
+      .eq('id', planId)
+      .single()
+
+    if (existingError || !existing) {
+      throw createError({
+        statusCode: 404,
+        statusMessage: 'Selected plan not found'
+      })
+    }
+
+    plan = existing
+  } else {
+    const planJson = (body.plan_json as Plan | undefined) || await generatePlan(useOpenAI(), body.prompt)
+    validationErrors = validatePlan(planJson)
+
+    const { data: newPlan, error: planError } = await client
+      .from('plans')
+      .insert({
+        title: body.title,
+        prompt: body.prompt,
+        plan_json: planJson,
+        version: 1
+      })
+      .select()
+      .single()
+
+    if (planError || !newPlan) {
+      throw createError({
+        statusCode: 500,
+        statusMessage: planError?.message || 'Failed to create plan'
+      })
+    }
+
+    plan = newPlan
+    planId = newPlan.id
+  }
 
   const { data: taskData, error: taskError } = await client
     .from('tasks')
     .insert({
       title: body.title,
       prompt: body.prompt,
+      plan_id: planId,
       trigger_type: body.trigger_type,
-      schedule_config: body.schedule_config
+      schedule_config: body.schedule_config,
+      input_artifact_ids: body.input_artifact_ids
     })
     .select()
     .single()
@@ -44,24 +92,11 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const planJson = (body.plan_json as Plan | undefined) || await generatePlan(openai!, body.prompt)
-  const validationErrors = validatePlan(planJson)
-
-  const { data: plan, error: planError } = await client
-    .from('plans')
-    .insert({
-      task_id: task.id,
-      plan_json: planJson,
-      version: 1
-    })
-    .select()
-    .single()
-
-  if (planError || !plan) {
-    throw createError({
-      statusCode: 500,
-      statusMessage: planError?.message || 'Failed to create plan'
-    })
+  if (!plan.task_id) {
+    await client
+      .from('plans')
+      .update({ task_id: task.id })
+      .eq('id', planId!)
   }
 
   const jobType = body.trigger_type === 'scheduled'

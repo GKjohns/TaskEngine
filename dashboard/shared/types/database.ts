@@ -19,9 +19,52 @@ export interface Database {
           id: string
           title: string
           prompt: string
+          plan_id: string | null
           trigger_type: TaskTriggerType
           schedule_config: Record<string, unknown>
           status: TaskStatus
+          created_by: string | null
+          created_at: string
+          updated_at: string
+          input_artifact_ids: string[]
+        }
+        Insert: {
+          id?: string
+          title: string
+          prompt: string
+          plan_id?: string | null
+          trigger_type: TaskTriggerType
+          schedule_config?: Record<string, unknown>
+          status?: TaskStatus
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+          input_artifact_ids?: string[]
+        }
+        Update: {
+          id?: string
+          title?: string
+          prompt?: string
+          plan_id?: string | null
+          trigger_type?: TaskTriggerType
+          schedule_config?: Record<string, unknown>
+          status?: TaskStatus
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+          input_artifact_ids?: string[]
+        }
+        Relationships: []
+      }
+      plans: {
+        Row: {
+          id: string
+          title: string
+          description: string | null
+          prompt: string | null
+          task_id: string | null
+          plan_json: Plan
+          version: number
           created_by: string | null
           created_at: string
           updated_at: string
@@ -29,10 +72,11 @@ export interface Database {
         Insert: {
           id?: string
           title: string
-          prompt: string
-          trigger_type: TaskTriggerType
-          schedule_config?: Record<string, unknown>
-          status?: TaskStatus
+          description?: string | null
+          prompt?: string | null
+          task_id?: string | null
+          plan_json: Plan
+          version?: number
           created_by?: string | null
           created_at?: string
           updated_at?: string
@@ -40,37 +84,14 @@ export interface Database {
         Update: {
           id?: string
           title?: string
-          prompt?: string
-          trigger_type?: TaskTriggerType
-          schedule_config?: Record<string, unknown>
-          status?: TaskStatus
+          description?: string | null
+          prompt?: string | null
+          task_id?: string | null
+          plan_json?: Plan
+          version?: number
           created_by?: string | null
           created_at?: string
           updated_at?: string
-        }
-        Relationships: []
-      }
-      plans: {
-        Row: {
-          id: string
-          task_id: string
-          plan_json: Plan
-          version: number
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          task_id: string
-          plan_json: Plan
-          version?: number
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          task_id?: string
-          plan_json?: Plan
-          version?: number
-          created_at?: string
         }
         Relationships: []
       }
@@ -121,6 +142,7 @@ export interface Database {
           completed_at: string | null
           error_message: string | null
           description: string | null
+          input_artifact_ids: string[]
         }
         Insert: {
           id?: string
@@ -132,6 +154,7 @@ export interface Database {
           completed_at?: string | null
           error_message?: string | null
           description?: string | null
+          input_artifact_ids?: string[]
         }
         Update: {
           id?: string
@@ -143,6 +166,7 @@ export interface Database {
           completed_at?: string | null
           error_message?: string | null
           description?: string | null
+          input_artifact_ids?: string[]
         }
         Relationships: []
       }

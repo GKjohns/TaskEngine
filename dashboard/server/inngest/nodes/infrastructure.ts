@@ -93,6 +93,26 @@ export function parseDurationToMs(duration: string | null) {
 }
 
 export const retrieve: NodeExecutor = async (node, context) => {
+  if (context.inputArtifacts.length > 0) {
+    const count = context.inputArtifacts.length
+    return {
+      artifacts: context.inputArtifacts.map(artifact => ({
+        title: artifact.title,
+        content: artifact.content || '',
+        type: artifact.type,
+        metadata: {
+          source_id: artifact.id
+        }
+      })),
+      description: describeRetrieve(count, 'selected artifacts'),
+      logs: {
+        retrieved_count: count,
+        source: 'run_input',
+        filter: null
+      }
+    }
+  }
+
   let query = context.supabase
     .from('artifacts')
     .select('id, title, content, type, metadata_json, storage_path')

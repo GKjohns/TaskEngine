@@ -50,7 +50,7 @@ const csvHeaders = computed(() => csvRows.value[0] ? Object.keys(csvRows.value[0
           </UBadge>
         </div>
 
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2">
           <UButton
             color="neutral"
             variant="soft"
@@ -60,6 +60,7 @@ const csvHeaders = computed(() => csvRows.value[0] ? Object.keys(csvRows.value[0
           >
             Refresh
           </UButton>
+          <RunTaskOnArtifactModal v-if="data" :artifact-id="data.id" />
           <UButton
             v-if="data?.download_url"
             trailing-icon="i-lucide-arrow-up-right"

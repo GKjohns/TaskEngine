@@ -53,9 +53,12 @@ export default defineEventHandler(async (event) => {
   const { data: plan, error: planError } = await client
     .from('plans')
     .insert({
+      title: task.title,
+      prompt: task.prompt,
       task_id: id,
       plan_json: planJson,
-      version: nextVersion
+      version: nextVersion,
+      created_by: task.created_by
     })
     .select()
     .single()
@@ -66,6 +69,11 @@ export default defineEventHandler(async (event) => {
       statusMessage: planError?.message || 'Failed to create plan'
     })
   }
+
+  await client
+    .from('tasks')
+    .update({ plan_id: plan.id })
+    .eq('id', id)
 
   return {
     plan,

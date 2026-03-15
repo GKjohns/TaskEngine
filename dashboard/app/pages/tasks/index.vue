@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { JobRecord, RunRecord, TaskRecord } from '../../../shared/types/task-engine'
+import type { ArtifactRecord, JobRecord, PlanRecord, RunRecord, TaskRecord } from '../../../shared/types/task-engine'
 import {
   formatDateTime,
   formatRelativeCount,
@@ -8,6 +8,7 @@ import {
 } from '../../utils/taskEngine'
 
 interface TaskListItem extends TaskRecord {
+  current_plan?: Pick<PlanRecord, 'id' | 'title' | 'version'> | null
   plans?: Array<{
     id: string
     version: number
@@ -15,6 +16,7 @@ interface TaskListItem extends TaskRecord {
   }>
   runs?: Array<Pick<RunRecord, 'id' | 'status' | 'started_at' | 'completed_at'>>
   jobs?: Array<Pick<JobRecord, 'id' | 'job_type' | 'status' | 'next_run_at' | 'last_run_at' | 'last_error'>>
+  latest_output_artifact?: ArtifactRecord | null
 }
 
 const triggerColorMap = {
@@ -40,9 +42,12 @@ const tasks = computed(() => (data.value || []).map((task) => {
     return bTime - aTime
   })
 
+  const currentPlan = task.current_plan || (plans[0] ? { id: plans[0].id, title: null, version: plans[0].version } : null)
+
   return {
     ...task,
-    latestPlanVersion: plans[0]?.version ?? null,
+    currentPlan,
+    latestPlanVersion: currentPlan?.version ?? plans[0]?.version ?? null,
     latestRun: runs[0] ?? null,
     primaryJob: (task.jobs || [])[0] ?? null,
     planCount: plans.length,
@@ -71,21 +76,8 @@ async function updateTask(taskId: string, payload: Partial<Pick<TaskRecord, 'sta
   }
 }
 
-async function runTask(taskId: string) {
-  pendingTaskId.value = taskId
-  actionError.value = ''
-
-  try {
-    await $fetch('/api/runs', {
-      method: 'POST',
-      body: { task_id: taskId }
-    })
-    await refresh()
-  } catch (error) {
-    actionError.value = error instanceof Error ? error.message : 'Failed to start the run.'
-  } finally {
-    pendingTaskId.value = null
-  }
+async function onRunStarted() {
+  await refresh()
 }
 </script>
 
@@ -172,8 +164,13 @@ async function runTask(taskId: string) {
                   <UBadge :color="triggerColorMap[task.trigger_type]" variant="subtle">
                     {{ task.trigger_type }}
                   </UBadge>
-                  <UBadge color="neutral" variant="outline">
-                    {{ task.latestPlanVersion ? `Plan v${task.latestPlanVersion}` : 'No plan yet' }}
+                  <NuxtLink v-if="task.currentPlan" :to="`/plans/${task.currentPlan.id}`" class="hover:opacity-80 transition" @click.stop>
+                    <UBadge color="primary" variant="outline">
+                      {{ task.currentPlan.title || `Plan v${task.latestPlanVersion}` }}
+                    </UBadge>
+                  </NuxtLink>
+                  <UBadge v-else color="neutral" variant="outline">
+                    No plan yet
                   </UBadge>
                 </div>
               </div>
@@ -191,6 +188,13 @@ async function runTask(taskId: string) {
             <p class="line-clamp-3 text-sm text-muted">
               {{ task.prompt }}
             </p>
+
+            <div v-if="task.latest_output_artifact" class="space-y-2">
+              <p class="text-sm font-medium text-highlighted">
+                Latest completed output
+              </p>
+              <ArtifactPreview :artifact="task.latest_output_artifact" compact />
+            </div>
 
             <div class="grid gap-3 text-sm text-toned sm:grid-cols-2 lg:grid-cols-3">
               <div>
@@ -232,15 +236,13 @@ async function runTask(taskId: string) {
             </div>
 
             <div class="flex flex-wrap gap-2 border-t border-default pt-4">
-              <UButton
+              <RunTaskModal
                 v-if="task.status !== 'archived' && task.latestPlanVersion"
-                size="sm"
-                icon="i-lucide-play"
-                :loading="pendingTaskId === task.id"
-                @click="runTask(task.id)"
-              >
-                Run now
-              </UButton>
+                :task-id="task.id"
+                :task-artifact-ids="task.input_artifact_ids"
+                compact
+                @started="onRunStarted"
+              />
               <UButton
                 v-if="task.status === 'active' && (task.trigger_type !== 'manual' || ['scheduled', 'running', 'waiting_review'].includes(task.primaryJob?.status ?? ''))"
                 color="warning"
