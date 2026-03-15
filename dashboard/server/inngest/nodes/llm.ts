@@ -1,6 +1,7 @@
 import type { ResponseTextConfig } from 'openai/resources/responses/responses'
 import type { ArtifactType, PlanNode } from '../../../shared/types/task-engine'
-import type { NodeExecutionContext, NodeExecutor, NodeExecutorResult, RuntimeInputArtifact } from './types'
+import { joinArtifactInputs, renderArtifactInput } from './input'
+import type { NodeExecutionContext, NodeExecutor, NodeExecutorResult } from './types'
 
 interface LlmCallConfig {
   model: string
@@ -9,16 +10,6 @@ interface LlmCallConfig {
   textFormat?: ResponseTextConfig['format']
   artifactType?: ArtifactType
   title?: string
-}
-
-function renderArtifactInput(artifact: RuntimeInputArtifact) {
-  const content = artifact.content?.trim() || ''
-
-  if (!content && artifact.storage_path) {
-    return `# ${artifact.title}\nType: ${artifact.type}\nStored in Supabase Storage at ${artifact.storage_path}.`
-  }
-
-  return `# ${artifact.title}\nType: ${artifact.type}\n\n${content}`
 }
 
 async function runLlmNode(
@@ -65,7 +56,7 @@ async function runLlmNode(
   }
 
   const inputText = context.inputArtifacts.length
-    ? context.inputArtifacts.map(renderArtifactInput).join('\n\n---\n\n')
+    ? joinArtifactInputs(context.inputArtifacts)
     : (node.prompt || '')
   const callConfig = buildCall(inputText)
   const response = await context.openai.responses.create({

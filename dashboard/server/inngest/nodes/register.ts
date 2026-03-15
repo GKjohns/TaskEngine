@@ -1,5 +1,6 @@
-import { PLAN_NODE_TYPES } from '../../../shared/types/task-engine'
-import { branch, emit, notify, retrieve, review, unsupportedAgentNode, wait } from './infrastructure'
+import { agentCode } from './agentCode'
+import { agentTransform } from './agentTransform'
+import { branch, emit, notify, retrieve, review, wait } from './infrastructure'
 import { llmClassify, llmExtract, llmSummarize, llmTransform } from './llm'
 import { registerNodeExecutor } from './registry'
 
@@ -10,6 +11,8 @@ export function ensureNodeExecutorsRegistered() {
     return
   }
 
+  registerNodeExecutor('agent_transform', agentTransform)
+  registerNodeExecutor('agent_code', agentCode)
   registerNodeExecutor('llm_summarize', llmSummarize)
   registerNodeExecutor('llm_classify', llmClassify)
   registerNodeExecutor('llm_extract', llmExtract)
@@ -20,12 +23,6 @@ export function ensureNodeExecutorsRegistered() {
   registerNodeExecutor('branch', branch)
   registerNodeExecutor('notify', notify)
   registerNodeExecutor('wait', wait)
-
-  for (const nodeType of PLAN_NODE_TYPES) {
-    if (nodeType === 'agent_transform' || nodeType === 'agent_code') {
-      registerNodeExecutor(nodeType, unsupportedAgentNode)
-    }
-  }
 
   registered = true
 }

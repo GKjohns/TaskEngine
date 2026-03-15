@@ -1,28 +1,11 @@
 import type { NodeExecutor } from './types'
+import { joinArtifactInputs } from './input'
 
 function replaceTitleTokens(value: string) {
   const now = new Date()
   return value
     .replaceAll('{{date}}', now.toLocaleDateString())
     .replaceAll('{{datetime}}', now.toISOString())
-}
-
-function joinArtifactContent(inputArtifacts: Array<{ title: string, content: string | null, type: string, storage_path: string | null }>) {
-  return inputArtifacts
-    .map((artifact) => {
-      const content = artifact.content?.trim()
-
-      if (content) {
-        return `# ${artifact.title}\nType: ${artifact.type}\n\n${content}`
-      }
-
-      if (artifact.storage_path) {
-        return `# ${artifact.title}\nType: ${artifact.type}\nStored in Supabase Storage at ${artifact.storage_path}.`
-      }
-
-      return `# ${artifact.title}\nType: ${artifact.type}\n[No inline content available]`
-    })
-    .join('\n\n---\n\n')
 }
 
 function evaluateBranchCondition(condition: string | null, inputText: string, artifactCount: number) {
@@ -145,7 +128,7 @@ export const retrieve: NodeExecutor = async (node, context) => {
 
 export const emit: NodeExecutor = async (node, context) => {
   const title = replaceTitleTokens(node.title || 'Output')
-  const content = joinArtifactContent(context.inputArtifacts)
+  const content = joinArtifactInputs(context.inputArtifacts)
 
   return {
     artifacts: [{
@@ -195,7 +178,7 @@ export const review: NodeExecutor = async (node, context) => {
 }
 
 export const branch: NodeExecutor = async (node, context) => {
-  const inputText = joinArtifactContent(context.inputArtifacts)
+  const inputText = joinArtifactInputs(context.inputArtifacts)
   const outcome = evaluateBranchCondition(node.condition, inputText, context.inputArtifacts.length)
   const selectedNode = outcome ? node.if_true_node : node.if_false_node
   const skippedNode = outcome ? node.if_false_node : node.if_true_node
@@ -212,7 +195,7 @@ export const branch: NodeExecutor = async (node, context) => {
 }
 
 export const notify: NodeExecutor = async (node, context) => {
-  const preview = joinArtifactContent(context.inputArtifacts).slice(0, 1000)
+  const preview = joinArtifactInputs(context.inputArtifacts).slice(0, 1000)
 
   return {
     artifacts: [],
@@ -232,7 +215,3 @@ export const wait: NodeExecutor = async (node, context) => ({
     input_count: context.inputArtifacts.length
   }
 })
-
-export const unsupportedAgentNode: NodeExecutor = async (node) => {
-  throw new Error(`Node type "${node.type}" is not supported until Sprint 3`)
-}
