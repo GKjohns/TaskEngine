@@ -57,9 +57,8 @@ const links: NavigationMenuItem[][] = [[{
       </template>
 
       <template #footer="{ collapsed }">
-        <div class="flex items-center" :class="collapsed ? 'justify-center' : 'justify-between'">
+        <div class="flex items-center" :class="collapsed ? 'justify-center' : ''">
           <UColorModeButton />
-          <UDashboardSidebarCollapse v-if="!collapsed" />
         </div>
       </template>
     </UDashboardSidebar>

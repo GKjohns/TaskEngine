@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
+import type { Database } from '../../shared/types/database'
 
-let _serviceClient: ReturnType<typeof createClient> | null = null
+let _serviceClient: ReturnType<typeof createClient<Database>> | null = null
 
 export function createServiceClient() {
   if (_serviceClient) return _serviceClient
@@ -10,7 +11,7 @@ export function createServiceClient() {
     throw new Error('SUPABASE_URL and SUPABASE_SERVICE_KEY must be set')
   }
 
-  _serviceClient = createClient(config.supabaseUrl, config.supabaseServiceKey)
+  _serviceClient = createClient<Database>(config.supabaseUrl, config.supabaseServiceKey)
   return _serviceClient
 }
 
