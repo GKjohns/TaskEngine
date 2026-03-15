@@ -11,6 +11,7 @@ interface ReviewCardReview extends ReviewRecord {
   node_runs?: {
     node_key: string
     node_type: string
+    description: string | null
   } | null
 }
 
@@ -33,7 +34,10 @@ const emit = defineEmits<{
           <p class="font-semibold text-highlighted">
             {{ review.runs?.tasks?.title || review.id }}
           </p>
-          <p class="mt-1 text-sm text-muted">
+          <p v-if="review.node_runs?.description" class="mt-1 text-sm text-muted">
+            {{ review.node_runs.description }}
+          </p>
+          <p class="mt-1 text-xs text-dimmed">
             {{ review.node_runs?.node_key ? `${review.node_runs.node_key} · ${review.node_runs.node_type}` : 'Node details unavailable' }}
           </p>
         </div>

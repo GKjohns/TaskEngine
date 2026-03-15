@@ -14,6 +14,7 @@ interface NodeState {
   status: string
   outputRefs: string[]
   logs: Record<string, unknown>
+  description?: string
 }
 
 function toSleepDuration(waitMs: number) {
@@ -72,6 +73,8 @@ export const executeRun = inngest.createFunction(
       jobId: string | null
     }
 
+    const nodeStates: Record<string, NodeState> = {}
+
     try {
       const plan = await step.run('load-plan', async () => {
         const supabase = createServiceClient()
@@ -98,7 +101,6 @@ export const executeRun = inngest.createFunction(
       })
 
       const sortedNodes = topoSort(plan.nodes as PlanNode[])
-      const nodeStates: Record<string, NodeState> = {}
       const explicitlySkippedNodes = new Set<string>()
 
       for (const node of sortedNodes) {
@@ -227,6 +229,7 @@ export const executeRun = inngest.createFunction(
                 status,
                 output_refs: outputRefs,
                 logs: execution.logs,
+                description: execution.description || null,
                 completed_at: status === 'completed' ? new Date().toISOString() : null
               })
               .eq('id', nodeRun.id)
@@ -239,7 +242,8 @@ export const executeRun = inngest.createFunction(
               nodeRunId: nodeRun.id,
               status,
               outputRefs,
-              logs: execution.logs
+              logs: execution.logs,
+              description: execution.description
             }
           } catch (error) {
             await supabase
@@ -419,6 +423,34 @@ export const executeRun = inngest.createFunction(
         }
       }
 
+      await step.run('generate-run-description', async () => {
+        const supabase = createServiceClient()
+        const openai = useOpenAI()
+        const nodeDescriptions = Object.entries(nodeStates)
+          .filter(([, state]) => state.status === 'completed' && state.description)
+          .map(([nodeId, state]) => `- ${nodeId}: ${state.description}`)
+
+        if (!nodeDescriptions.length) {
+          return
+        }
+
+        try {
+          const response = await openai.responses.create({
+            model: 'gpt-5-nano',
+            instructions: 'You are summarizing a completed task run. Given the list of steps and what each accomplished, write 1-2 sentences describing the overall outcome. Be specific about what was produced, not about the process. Do not use markdown.',
+            input: nodeDescriptions.join('\n'),
+            reasoning: { effort: 'low' }
+          })
+
+          await supabase
+            .from('runs')
+            .update({ description: response.output_text })
+            .eq('id', runId)
+        } catch {
+          // Non-critical: if description generation fails, the run still succeeds
+        }
+      })
+
       await step.run('mark-completed', async () => {
         await markRunAndJobStatus({
           runId,
@@ -430,13 +462,29 @@ export const executeRun = inngest.createFunction(
       })
     } catch (error) {
       await step.run('mark-failed', async () => {
+        const supabase = createServiceClient()
+        const errorMsg = error instanceof Error ? error.message : 'Run execution failed'
+
+        const completedNodes = Object.entries(nodeStates)
+          .filter(([, state]) => state.status === 'completed' && state.description)
+          .map(([nodeId, state]) => `${nodeId}: ${state.description}`)
+        const progressNote = completedNodes.length
+          ? ` Completed ${completedNodes.length} step(s) before failure: ${completedNodes.join('; ')}.`
+          : ''
+        const failDescription = `Run failed: ${errorMsg}.${progressNote}`
+
+        await supabase
+          .from('runs')
+          .update({ description: failDescription })
+          .eq('id', runId)
+
         await markRunAndJobStatus({
           runId,
           jobId,
           runStatus: 'failed',
           jobStatus: 'failed',
-          errorMessage: error instanceof Error ? error.message : 'Run execution failed',
-          lastError: error instanceof Error ? error.message : 'Run execution failed',
+          errorMessage: errorMsg,
+          lastError: errorMsg,
           completed: true
         })
       })

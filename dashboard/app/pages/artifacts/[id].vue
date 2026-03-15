@@ -85,6 +85,9 @@ const csvHeaders = computed(() => csvRows.value[0] ? Object.keys(csvRows.value[0
             <h2 class="text-base font-semibold text-highlighted">
               Metadata
             </h2>
+            <p v-if="data.description" class="text-muted">
+              {{ data.description }}
+            </p>
             <p>Created {{ formatDateTime(data.created_at) }}</p>
             <p>{{ data.storage_path ? `Storage path: ${data.storage_path}` : 'Stored inline in the database' }}</p>
             <p>{{ data.created_by_run_id ? `Run: ${data.created_by_run_id}` : 'No run recorded' }}</p>

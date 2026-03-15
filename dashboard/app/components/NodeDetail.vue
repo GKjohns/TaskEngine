@@ -38,7 +38,10 @@ const errorMessage = computed(() => typeof logs.value.error === 'string' ? logs.
                 {{ nodeRun.status }}
               </UBadge>
             </div>
-            <p class="text-sm text-muted">
+            <p v-if="nodeRun.description" class="text-sm text-muted">
+              {{ nodeRun.description }}
+            </p>
+            <p v-else class="text-sm text-dimmed">
               {{ node?.description || 'Execution record for this node.' }}
             </p>
           </div>

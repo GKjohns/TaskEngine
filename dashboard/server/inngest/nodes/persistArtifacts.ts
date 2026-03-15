@@ -78,7 +78,8 @@ export async function persistExecutionArtifacts(
         storage_path: storagePath,
         task_id: context.taskId,
         created_by_run_id: context.runId,
-        created_by_node_id: context.nodeRunId
+        created_by_node_id: context.nodeRunId,
+        description: artifact.description || null
       })
       .select('id')
       .single()

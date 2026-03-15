@@ -9,6 +9,7 @@ export interface RuntimeArtifact {
   content: string
   type: ArtifactType
   metadata?: Record<string, unknown>
+  description?: string
 }
 
 export interface RuntimeInputArtifact {
@@ -23,6 +24,7 @@ export interface RuntimeInputArtifact {
 export interface NodeExecutorResult {
   artifacts: RuntimeArtifact[]
   logs: Record<string, unknown>
+  description?: string
 }
 
 export interface NodeExecutionContext {

@@ -1,5 +1,6 @@
 import { joinArtifactInputs, renderArtifactInput } from './input'
 import { runAgentLoop } from './agentLoop'
+import { describeAgentResult } from './describe'
 import { agentTransformTools } from './tools'
 import type { NodeExecutor } from './types'
 
@@ -18,6 +19,7 @@ export const agentTransform: NodeExecutor = async (node, context) => {
   if (node.per_artifact && context.inputArtifacts.length > 0) {
     const artifacts = []
     const calls: Array<Record<string, unknown>> = []
+    const descriptions: string[] = []
 
     for (const artifact of context.inputArtifacts) {
       const result = await runAgentLoop({
@@ -30,11 +32,14 @@ export const agentTransform: NodeExecutor = async (node, context) => {
         context
       })
 
+      const desc = describeAgentResult(result.output)
       artifacts.push({
         title: node.title ? `${node.title} - ${artifact.title}` : `${artifact.title} result`,
         content: result.output,
-        type: 'markdown' as const
+        type: 'markdown' as const,
+        description: desc
       })
+      descriptions.push(desc)
       calls.push({
         artifact_id: artifact.id,
         artifact_title: artifact.title,
@@ -44,8 +49,13 @@ export const agentTransform: NodeExecutor = async (node, context) => {
       })
     }
 
+    const nodeDesc = descriptions.length > 1
+      ? `Processed ${descriptions.length} artifacts: ${descriptions.slice(0, 3).join('; ')}`
+      : descriptions[0] || undefined
+
     return {
       artifacts,
+      description: nodeDesc,
       logs: {
         model: MODEL,
         per_artifact: true,
@@ -68,12 +78,16 @@ export const agentTransform: NodeExecutor = async (node, context) => {
     context
   })
 
+  const description = describeAgentResult(result.output)
+
   return {
     artifacts: [{
       title: node.title || 'Agent Output',
       content: result.output,
-      type: 'markdown'
+      type: 'markdown',
+      description
     }],
+    description,
     logs: {
       model: MODEL,
       per_artifact: false,

@@ -190,7 +190,11 @@ async function resolveReview(nextStatus: 'approved' | 'rejected' | 'edited') {
               Run summary
             </h2>
 
-            <div class="space-y-2 text-sm text-muted">
+            <p v-if="run.description" class="text-sm text-muted">
+              {{ run.description }}
+            </p>
+
+            <div class="space-y-2 text-sm text-dimmed">
               <p>Started {{ formatDateTime(run.started_at) }}</p>
               <p>Completed {{ formatDateTime(run.completed_at) }}</p>
               <p>Duration {{ formatDuration(run.started_at, run.completed_at) }}</p>

@@ -9,7 +9,7 @@ export default defineEventHandler(async (event) => {
 
   let request = client
     .from('reviews')
-    .select('*, runs(id, task_id, tasks(title)), node_runs(node_key, node_type)')
+    .select('*, runs(id, task_id, tasks(title)), node_runs(node_key, node_type, description)')
     .order('created_at', { ascending: false })
 
   if (typeof query.status === 'string' && reviewStatuses.has(query.status as ReviewStatus)) {

@@ -27,9 +27,9 @@ function isActiveLink(path: string) {
       :ui="{ footer: 'lg:border-t lg:border-default' }"
     >
       <template #header="{ collapsed }">
-        <div class="flex w-full items-center justify-center px-1">
+        <NuxtLink to="/" class="flex w-full items-center justify-center px-1">
           <AppLogo :size="collapsed ? 24 : 32" :show-wordmark="!collapsed" />
-        </div>
+        </NuxtLink>
       </template>
 
       <template #default="{ collapsed }">

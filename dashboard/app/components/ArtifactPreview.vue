@@ -36,7 +36,10 @@ const preview = computed(() => {
         </UBadge>
       </div>
 
-      <p class="text-sm text-muted">
+      <p v-if="artifact.description" class="text-sm text-muted">
+        {{ artifact.description }}
+      </p>
+      <p class="text-sm text-dimmed" :class="{ 'line-clamp-2': artifact.description }">
         {{ preview }}
       </p>
 

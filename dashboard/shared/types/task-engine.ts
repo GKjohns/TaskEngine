@@ -89,6 +89,7 @@ export interface RunRecord {
   started_at: string | null
   completed_at: string | null
   error_message: string | null
+  description: string | null
 }
 
 export interface NodeRunRecord {
@@ -102,6 +103,7 @@ export interface NodeRunRecord {
   logs: Record<string, unknown>
   started_at: string | null
   completed_at: string | null
+  description: string | null
 }
 
 export interface ArtifactRecord {
@@ -116,6 +118,7 @@ export interface ArtifactRecord {
   created_by_node_id: string | null
   created_at: string
   download_url?: string
+  description: string | null
 }
 
 export interface ReviewRecord {

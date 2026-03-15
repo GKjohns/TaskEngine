@@ -120,6 +120,7 @@ export interface Database {
           started_at: string | null
           completed_at: string | null
           error_message: string | null
+          description: string | null
         }
         Insert: {
           id?: string
@@ -130,6 +131,7 @@ export interface Database {
           started_at?: string | null
           completed_at?: string | null
           error_message?: string | null
+          description?: string | null
         }
         Update: {
           id?: string
@@ -140,6 +142,7 @@ export interface Database {
           started_at?: string | null
           completed_at?: string | null
           error_message?: string | null
+          description?: string | null
         }
         Relationships: []
       }
@@ -155,6 +158,7 @@ export interface Database {
           logs: Record<string, unknown>
           started_at: string | null
           completed_at: string | null
+          description: string | null
         }
         Insert: {
           id?: string
@@ -167,6 +171,7 @@ export interface Database {
           logs?: Record<string, unknown>
           started_at?: string | null
           completed_at?: string | null
+          description?: string | null
         }
         Update: {
           id?: string
@@ -179,6 +184,7 @@ export interface Database {
           logs?: Record<string, unknown>
           started_at?: string | null
           completed_at?: string | null
+          description?: string | null
         }
         Relationships: []
       }
@@ -194,6 +200,7 @@ export interface Database {
           created_by_node_id: string | null
           task_id: string | null
           created_at: string
+          description: string | null
         }
         Insert: {
           id?: string
@@ -206,6 +213,7 @@ export interface Database {
           created_by_node_id?: string | null
           task_id?: string | null
           created_at?: string
+          description?: string | null
         }
         Update: {
           id?: string
@@ -218,6 +226,7 @@ export interface Database {
           created_by_node_id?: string | null
           task_id?: string | null
           created_at?: string
+          description?: string | null
         }
         Relationships: []
       }

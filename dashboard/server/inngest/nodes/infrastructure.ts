@@ -1,4 +1,12 @@
 import type { NodeExecutor } from './types'
+import {
+  describeBranch,
+  describeEmit,
+  describeNotify,
+  describeRetrieve,
+  describeReview,
+  describeWait
+} from './describe'
 import { joinArtifactInputs } from './input'
 
 function replaceTitleTokens(value: string) {
@@ -109,6 +117,8 @@ export const retrieve: NodeExecutor = async (node, context) => {
     throw new Error(error.message)
   }
 
+  const count = data?.length || 0
+
   return {
     artifacts: (data || []).map(artifact => ({
       title: artifact.title,
@@ -118,8 +128,9 @@ export const retrieve: NodeExecutor = async (node, context) => {
         source_id: artifact.id
       }
     })),
+    description: describeRetrieve(count, node.source),
     logs: {
-      retrieved_count: data?.length || 0,
+      retrieved_count: count,
       source: node.source,
       filter: node.filter
     }
@@ -128,14 +139,16 @@ export const retrieve: NodeExecutor = async (node, context) => {
 
 export const emit: NodeExecutor = async (node, context) => {
   const title = replaceTitleTokens(node.title || 'Output')
+  const format = node.format || 'markdown'
   const content = joinArtifactInputs(context.inputArtifacts)
 
   return {
     artifacts: [{
       title,
       content,
-      type: node.format || 'markdown'
+      type: format
     }],
+    description: describeEmit(title, format),
     logs: {
       emitted_title: title,
       artifact_count: context.inputArtifacts.length
@@ -170,6 +183,7 @@ export const review: NodeExecutor = async (node, context) => {
 
   return {
     artifacts: [],
+    description: describeReview(node.message),
     logs: {
       review_id: data.id,
       message: node.message || 'Review requested'
@@ -185,6 +199,7 @@ export const branch: NodeExecutor = async (node, context) => {
 
   return {
     artifacts: [],
+    description: describeBranch(node.condition, outcome, selectedNode),
     logs: {
       condition: node.condition,
       outcome,
@@ -195,12 +210,14 @@ export const branch: NodeExecutor = async (node, context) => {
 }
 
 export const notify: NodeExecutor = async (node, context) => {
+  const level = node.level || 'info'
   const preview = joinArtifactInputs(context.inputArtifacts).slice(0, 1000)
 
   return {
     artifacts: [],
+    description: describeNotify(level, node.message),
     logs: {
-      level: node.level || 'info',
+      level,
       message: node.message || 'Notification generated',
       preview
     }
@@ -209,6 +226,7 @@ export const notify: NodeExecutor = async (node, context) => {
 
 export const wait: NodeExecutor = async (node, context) => ({
   artifacts: [],
+  description: describeWait(node.duration),
   logs: {
     requested_duration: node.duration,
     wait_ms: parseDurationToMs(node.duration),

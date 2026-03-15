@@ -1,7 +1,15 @@
 import type { ResponseTextConfig } from 'openai/resources/responses/responses'
 import type { ArtifactType, PlanNode } from '../../../shared/types/task-engine'
+import {
+  describeClassifyResult,
+  describeExtractResult,
+  describeSummarizeResult,
+  describeTransformResult
+} from './describe'
 import { joinArtifactInputs, renderArtifactInput } from './input'
 import type { NodeExecutionContext, NodeExecutor, NodeExecutorResult } from './types'
+
+type DescribeFn = (outputText: string, artifactTitle?: string) => string
 
 interface LlmCallConfig {
   model: string
@@ -10,6 +18,7 @@ interface LlmCallConfig {
   textFormat?: ResponseTextConfig['format']
   artifactType?: ArtifactType
   title?: string
+  describe?: DescribeFn
 }
 
 async function runLlmNode(
@@ -22,6 +31,7 @@ async function runLlmNode(
   if (perArtifact) {
     const artifacts = []
     const calls: Array<Record<string, unknown>> = []
+    const descriptions: string[] = []
 
     for (const artifact of context.inputArtifacts) {
       const inputText = renderArtifactInput(artifact)
@@ -34,19 +44,27 @@ async function runLlmNode(
         text: callConfig.textFormat ? { format: callConfig.textFormat } : undefined
       })
 
+      const artifactDesc = callConfig.describe?.(response.output_text, artifact.title)
       artifacts.push({
         title: callConfig.title || `${artifact.title} result`,
         content: response.output_text,
-        type: callConfig.artifactType || 'markdown'
+        type: callConfig.artifactType || 'markdown',
+        description: artifactDesc
       })
+      descriptions.push(artifactDesc || '')
       calls.push({
         artifact: artifact.title,
         usage: response.usage || null
       })
     }
 
+    const nodeDesc = descriptions.filter(Boolean).length > 1
+      ? `Processed ${descriptions.length} artifacts: ${descriptions.filter(Boolean).slice(0, 3).join('; ')}`
+      : descriptions[0] || undefined
+
     return {
       artifacts,
+      description: nodeDesc,
       logs: {
         model: artifacts.length > 0 ? buildCall('', context.inputArtifacts[0]?.title).model : 'unknown',
         per_artifact: true,
@@ -67,12 +85,16 @@ async function runLlmNode(
     text: callConfig.textFormat ? { format: callConfig.textFormat } : undefined
   })
 
+  const description = callConfig.describe?.(response.output_text)
+
   return {
     artifacts: [{
       title: callConfig.title || 'Result',
       content: response.output_text,
-      type: callConfig.artifactType || 'markdown'
+      type: callConfig.artifactType || 'markdown',
+      description
     }],
+    description,
     logs: {
       model: callConfig.model,
       per_artifact: false,
@@ -90,7 +112,8 @@ export const llmSummarize: NodeExecutor = async (node, context) => runLlmNode(no
   ].filter(Boolean).join('\n\n'),
   reasoning: { effort: 'medium' },
   artifactType: 'markdown',
-  title: 'Summary'
+  title: 'Summary',
+  describe: (output) => describeSummarizeResult(output)
 }))
 
 export const llmClassify: NodeExecutor = async (node, context) => runLlmNode(node, context, () => ({
@@ -120,7 +143,8 @@ export const llmClassify: NodeExecutor = async (node, context) => runLlmNode(nod
     }
   },
   artifactType: 'json',
-  title: 'Classification'
+  title: 'Classification',
+  describe: (output, artifactTitle) => describeClassifyResult(output, artifactTitle)
 }))
 
 export const llmExtract: NodeExecutor = async (node, context) => runLlmNode(node, context, () => ({
@@ -149,7 +173,8 @@ export const llmExtract: NodeExecutor = async (node, context) => runLlmNode(node
     }
   },
   artifactType: 'json',
-  title: 'Extraction'
+  title: 'Extraction',
+  describe: (output, artifactTitle) => describeExtractResult(output, artifactTitle)
 }))
 
 export const llmTransform: NodeExecutor = async (node, context) => runLlmNode(node, context, () => ({
@@ -160,5 +185,6 @@ export const llmTransform: NodeExecutor = async (node, context) => runLlmNode(no
   ].filter(Boolean).join('\n\n'),
   reasoning: { effort: 'medium' },
   artifactType: 'markdown',
-  title: 'Transformation'
+  title: 'Transformation',
+  describe: (output) => describeTransformResult(output)
 }))

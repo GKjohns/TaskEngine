@@ -83,11 +83,13 @@ const visibleRuns = computed(() => (data.value || []).filter(run =>
               <p class="font-medium text-highlighted">
                 {{ run.tasks?.title || run.id }}
               </p>
-              <p class="text-sm text-muted">
-                {{ formatRelativeTime(run.started_at || run.completed_at) }}
+              <p v-if="run.description" class="text-sm text-muted line-clamp-2">
+                {{ run.description }}
               </p>
-              <p class="text-sm text-muted">
-                {{ run.plans?.version ? `Plan v${run.plans.version}` : 'No plan version attached' }} · {{ formatDuration(run.started_at, run.completed_at) }}
+              <p class="text-sm text-dimmed">
+                {{ formatRelativeTime(run.started_at || run.completed_at) }}
+                · {{ run.plans?.version ? `Plan v${run.plans.version}` : 'No plan version attached' }}
+                · {{ formatDuration(run.started_at, run.completed_at) }}
               </p>
             </div>
 
