@@ -9,6 +9,7 @@ interface TaskDetail extends TaskRecord {
 }
 
 const route = useRoute()
+const router = useRouter()
 const taskId = computed(() => route.params.id as string)
 
 const triggerColorMap = {
@@ -48,6 +49,8 @@ const { data, status, error, refresh } = await useFetch<TaskDetail>(`/api/tasks/
 
 const replanPending = ref(false)
 const replanError = ref('')
+const runPending = ref(false)
+const runError = ref('')
 
 const task = computed(() => data.value)
 const plans = computed(() => [...(task.value?.plans || [])].sort((a, b) => b.version - a.version))
@@ -62,7 +65,6 @@ const jobs = computed(() => task.value?.jobs || [])
 function nodeDetails(node: PlanNode) {
   const details: string[] = []
 
-  if (node.prompt) details.push(`Prompt: ${node.prompt}`)
   if (node.labels?.length) details.push(`Labels: ${node.labels.join(', ')}`)
   if (node.max_length) details.push(`Max length: ${node.max_length}`)
   if (node.source) details.push(`Source: ${node.source}`)
@@ -71,7 +73,6 @@ function nodeDetails(node: PlanNode) {
   if (node.if_true_node) details.push(`If true: ${node.if_true_node}`)
   if (node.if_false_node) details.push(`If false: ${node.if_false_node}`)
   if (node.duration) details.push(`Duration: ${node.duration}`)
-  if (node.message) details.push(`Message: ${node.message}`)
   if (node.title) details.push(`Output title: ${node.title}`)
   if (node.format) details.push(`Format: ${node.format}`)
   if (node.level) details.push(`Level: ${node.level}`)
@@ -94,6 +95,26 @@ async function replanTask() {
     replanPending.value = false
   }
 }
+
+async function startRun() {
+  runPending.value = true
+  runError.value = ''
+
+  try {
+    const run = await $fetch<RunRecord>('/api/runs', {
+      method: 'POST',
+      body: {
+        task_id: taskId.value
+      }
+    })
+    await refresh()
+    await router.push(`/runs/${run.id}`)
+  } catch (error) {
+    runError.value = error instanceof Error ? error.message : 'Failed to start a run.'
+  } finally {
+    runPending.value = false
+  }
+}
 </script>
 
 <template>
@@ -112,10 +133,6 @@ async function replanTask() {
               {{ latestPlan ? `Latest plan v${latestPlan.version}` : 'No plan yet' }}
             </UBadge>
           </div>
-
-          <p v-if="task" class="max-w-4xl text-sm text-muted">
-            {{ task.prompt }}
-          </p>
         </div>
 
         <div class="flex items-center gap-3">
@@ -127,6 +144,15 @@ async function replanTask() {
             @click="refresh()"
           >
             Refresh
+          </UButton>
+          <UButton
+            color="primary"
+            icon="i-lucide-play"
+            :loading="runPending"
+            :disabled="!latestPlan"
+            @click="startRun"
+          >
+            Run now
           </UButton>
           <UButton icon="i-lucide-sparkles" :loading="replanPending" @click="replanTask">
             Replan
@@ -143,12 +169,27 @@ async function replanTask() {
       />
 
       <UAlert
-        v-else-if="replanError"
+        v-else-if="replanError || runError"
         color="error"
         variant="soft"
-        title="Replan failed"
-        :description="replanError"
+        :title="replanError ? 'Replan failed' : 'Run failed'"
+        :description="replanError || runError"
       />
+
+      <UCard v-if="task?.prompt" class="border border-default">
+        <div class="space-y-4">
+          <div>
+            <h2 class="text-base font-semibold text-highlighted">
+              Task prompt
+            </h2>
+            <p class="mt-1 text-sm text-muted">
+              The natural-language request used to generate this task and its latest plan.
+            </p>
+          </div>
+
+          <ReadOnlyMarkdown :content="task.prompt" format="text" />
+        </div>
+      </UCard>
 
       <div v-if="task" class="grid gap-4 xl:grid-cols-[1.2fr,0.8fr]">
         <UCard class="border border-default">
@@ -296,6 +337,20 @@ async function replanTask() {
                   {{ detail }}
                 </li>
               </ul>
+
+              <div v-if="node.prompt" class="mt-4 space-y-2">
+                <p class="text-sm font-medium text-highlighted">
+                  Prompt
+                </p>
+                <ReadOnlyMarkdown :content="node.prompt" format="text" />
+              </div>
+
+              <div v-if="node.message" class="mt-4 space-y-2">
+                <p class="text-sm font-medium text-highlighted">
+                  Message
+                </p>
+                <ReadOnlyMarkdown :content="node.message" format="text" />
+              </div>
             </div>
           </div>
         </div>
@@ -308,7 +363,7 @@ async function replanTask() {
               Recent runs
             </h2>
             <p class="mt-1 text-sm text-muted">
-              Execution details stay light in Sprint 1, but you can already inspect the run records tied to this task.
+              Trigger a manual run here and inspect the durable runtime records as nodes execute.
             </p>
           </div>
 

@@ -15,6 +15,8 @@ const typeColorMap = {
 const { data, error, refresh, status } = await useFetch<ArtifactRecord>(`/api/artifacts/${artifactId.value}`, {
   key: `artifact-${artifactId.value}`
 })
+
+const artifactContentFormat = computed(() => data.value?.type === 'markdown' ? 'markdown' : data.value?.type || 'text')
 </script>
 
 <template>
@@ -78,10 +80,12 @@ const { data, error, refresh, status } = await useFetch<ArtifactRecord>(`/api/ar
               Content
             </h2>
 
-            <pre
+            <ReadOnlyMarkdown
               v-if="data.content"
-              class="overflow-x-auto rounded-xl border border-default bg-elevated/40 p-4 text-sm text-toned"
-            ><code>{{ data.content }}</code></pre>
+              :content="data.content"
+              :format="artifactContentFormat"
+              :mono="data.type !== 'markdown'"
+            />
 
             <p v-else class="text-sm text-muted">
               This artifact was stored in Supabase Storage. Use the download action to open the signed URL.

@@ -1,6 +1,5 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
-
   modules: [
     '@nuxt/ui',
     '@vueuse/nuxt'
@@ -27,5 +26,17 @@ export default defineNuxtConfig({
     }
   },
 
-  compatibilityDate: '2025-01-01'
+  compatibilityDate: '2025-01-01',
+
+  vite: {
+    optimizeDeps: {
+      include: [
+        '@nuxt/ui > prosemirror-state',
+        '@nuxt/ui > prosemirror-transform',
+        '@nuxt/ui > prosemirror-model',
+        '@nuxt/ui > prosemirror-view',
+        '@nuxt/ui > prosemirror-gapcursor'
+      ]
+    }
+  }
 })

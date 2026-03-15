@@ -48,9 +48,6 @@ const { data, error, refresh, status } = await useFetch<RunDetail>(`/api/runs/${
               {{ `Plan v${data.plans.version}` }}
             </UBadge>
           </div>
-          <p v-if="data?.tasks?.prompt" class="mt-2 max-w-4xl text-sm text-muted">
-            {{ data.tasks.prompt }}
-          </p>
         </div>
 
         <UButton
@@ -72,7 +69,22 @@ const { data, error, refresh, status } = await useFetch<RunDetail>(`/api/runs/${
         :description="error.message"
       />
 
-      <div v-else-if="data" class="grid gap-4 xl:grid-cols-[0.8fr,1.2fr]">
+      <UCard v-if="data?.tasks?.prompt" class="border border-default">
+        <div class="space-y-4">
+          <div>
+            <h2 class="text-base font-semibold text-highlighted">
+              Source prompt
+            </h2>
+            <p class="mt-1 text-sm text-muted">
+              The task prompt associated with this run.
+            </p>
+          </div>
+
+          <ReadOnlyMarkdown :content="data.tasks.prompt" format="text" />
+        </div>
+      </UCard>
+
+      <div v-if="data" class="grid gap-4 xl:grid-cols-[0.8fr,1.2fr]">
         <UCard class="border border-default">
           <div class="space-y-4">
             <h2 class="text-base font-semibold text-highlighted">

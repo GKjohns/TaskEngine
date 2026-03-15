@@ -21,9 +21,31 @@ const statusColorMap = {
   edited: 'info'
 } as const
 
+const pendingReviewId = ref<string | null>(null)
+const actionError = ref('')
+
 const { data, status, error, refresh } = await useFetch<ReviewListItem[]>('/api/reviews', {
   default: () => []
 })
+
+async function resolveReview(reviewId: string, nextStatus: 'approved' | 'rejected' | 'edited') {
+  pendingReviewId.value = reviewId
+  actionError.value = ''
+
+  try {
+    await $fetch(`/api/reviews/${reviewId}`, {
+      method: 'PATCH',
+      body: {
+        status: nextStatus
+      }
+    })
+    await refresh()
+  } catch (error) {
+    actionError.value = error instanceof Error ? error.message : 'Failed to resolve the review.'
+  } finally {
+    pendingReviewId.value = null
+  }
+}
 </script>
 
 <template>
@@ -35,7 +57,7 @@ const { data, status, error, refresh } = await useFetch<ReviewListItem[]>('/api/
             Review inbox
           </h2>
           <p class="mt-1 text-sm text-muted">
-            Human approval routes are not active yet, but the Sprint 1 APIs already expose queued and resolved review records.
+            Review nodes now pause active runs until you approve, reject, or send them back for edits.
           </p>
         </div>
 
@@ -58,10 +80,18 @@ const { data, status, error, refresh } = await useFetch<ReviewListItem[]>('/api/
         :description="error.message"
       />
 
+      <UAlert
+        v-else-if="actionError"
+        color="error"
+        variant="soft"
+        title="Review action failed"
+        :description="actionError"
+      />
+
       <PageEmptyState
         v-else-if="!data?.length && status !== 'pending'"
         title="No reviews waiting"
-        description="Human checkpoints will appear here once review nodes start pausing runs."
+        description="Runs will appear here whenever a review node asks for human approval."
         icon="i-lucide-message-circle-warning"
       />
 
@@ -97,6 +127,32 @@ const { data, status, error, refresh } = await useFetch<ReviewListItem[]>('/api/
               <p v-if="review.comments">
                 Comments: {{ review.comments }}
               </p>
+            </div>
+
+            <div v-if="review.status === 'pending'" class="flex flex-wrap gap-2">
+              <UButton
+                color="success"
+                :loading="pendingReviewId === review.id"
+                @click="resolveReview(review.id, 'approved')"
+              >
+                Approve
+              </UButton>
+              <UButton
+                color="info"
+                variant="soft"
+                :loading="pendingReviewId === review.id"
+                @click="resolveReview(review.id, 'edited')"
+              >
+                Request edits
+              </UButton>
+              <UButton
+                color="error"
+                variant="soft"
+                :loading="pendingReviewId === review.id"
+                @click="resolveReview(review.id, 'rejected')"
+              >
+                Reject
+              </UButton>
             </div>
           </div>
         </UCard>
