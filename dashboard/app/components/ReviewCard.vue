@@ -48,9 +48,9 @@ const emit = defineEmits<{
         <p>Resolved {{ formatDateTime(review.resolved_at) }}</p>
       </div>
 
-      <p v-if="review.comments" class="text-sm text-muted">
-        {{ review.comments }}
-      </p>
+      <div v-if="review.comments">
+        <ContentRenderer :content="review.comments" compact />
+      </div>
 
       <div v-if="outputArtifact" class="space-y-2">
         <p class="text-sm font-medium text-highlighted">

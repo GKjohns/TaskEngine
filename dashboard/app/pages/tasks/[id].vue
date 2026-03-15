@@ -209,7 +209,7 @@ async function updateTaskStatus(nextStatus: TaskRecord['status']) {
             </p>
           </div>
 
-          <ReadOnlyMarkdown :content="task.prompt" format="text" />
+          <ContentRenderer :content="task.prompt" />
         </div>
       </UCard>
 
@@ -341,24 +341,36 @@ async function updateTaskStatus(nextStatus: TaskRecord['status']) {
               {{ selectedNode.description }}
             </p>
 
-            <div class="grid gap-3 text-sm text-muted">
-              <p>{{ selectedNode.depends_on.length ? `Depends on: ${selectedNode.depends_on.join(', ')}` : 'Root node' }}</p>
-              <p v-if="selectedNode.prompt">
-                Prompt: {{ selectedNode.prompt }}
+            <div class="space-y-3 text-sm">
+              <p class="text-muted">
+                {{ selectedNode.depends_on.length ? `Depends on: ${selectedNode.depends_on.join(', ')}` : 'Root node' }}
               </p>
-              <p v-if="selectedNode.source">
+
+              <div v-if="selectedNode.prompt" class="space-y-1.5">
+                <p class="text-xs font-medium text-muted uppercase tracking-wide">
+                  Prompt
+                </p>
+                <ContentRenderer :content="selectedNode.prompt" compact />
+              </div>
+
+              <div v-if="selectedNode.message" class="space-y-1.5">
+                <p class="text-xs font-medium text-muted uppercase tracking-wide">
+                  Review message
+                </p>
+                <ContentRenderer :content="selectedNode.message" compact />
+              </div>
+
+              <p v-if="selectedNode.source" class="text-muted">
                 Source: {{ selectedNode.source }}
               </p>
-              <p v-if="selectedNode.condition">
-                Condition: {{ selectedNode.condition }}
+              <p v-if="selectedNode.condition" class="text-muted">
+                <span class="font-medium">Condition:</span>
+                <code class="ml-1 rounded bg-elevated px-1.5 py-0.5 font-mono text-xs">{{ selectedNode.condition }}</code>
               </p>
-              <p v-if="selectedNode.duration">
+              <p v-if="selectedNode.duration" class="text-muted">
                 Duration: {{ selectedNode.duration }}
               </p>
-              <p v-if="selectedNode.message">
-                Review message: {{ selectedNode.message }}
-              </p>
-              <p v-if="selectedNode.title">
+              <p v-if="selectedNode.title" class="text-muted">
                 Output title: {{ selectedNode.title }}
               </p>
             </div>

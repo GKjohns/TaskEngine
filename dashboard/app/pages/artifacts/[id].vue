@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ArtifactRecord } from '../../../shared/types/task-engine'
-import { artifactTypeColorMap, formatDateTime, formatJson, parseCsvRows } from '../../utils/taskEngine'
+import { artifactTypeColorMap, formatDateTime, parseCsvRows } from '../../utils/taskEngine'
 
 const route = useRoute()
 const artifactId = computed(() => route.params.id as string)
@@ -10,20 +10,26 @@ const { data, error, refresh, status } = await useFetch<ArtifactRecord>(`/api/ar
 })
 
 const effectiveType = computed<ArtifactRecord['type']>(() => {
-  if (data.value?.type !== 'text' || !data.value.content) {
-    return data.value?.type || 'text'
+  const storedType = data.value?.type || 'text'
+  const content = data.value?.content?.trim()
+
+  if (!content) {
+    return storedType
   }
 
-  try {
-    JSON.parse(data.value.content)
-    return 'json'
-  } catch {
-    return 'text'
+  if (storedType !== 'json' && (content.startsWith('{') || content.startsWith('['))) {
+    try {
+      JSON.parse(content)
+      return 'json'
+    } catch {
+      // Not valid JSON, fall through
+    }
   }
+
+  return storedType
 })
 
 const artifactContentFormat = computed(() => effectiveType.value === 'markdown' ? 'markdown' : effectiveType.value || 'text')
-const formattedJson = computed(() => formatJson(data.value?.content || ''))
 const csvRows = computed(() => parseCsvRows(data.value?.content || ''))
 const csvHeaders = computed(() => csvRows.value[0] ? Object.keys(csvRows.value[0]).filter(key => key !== '_row') : [])
 </script>
@@ -98,10 +104,10 @@ const csvHeaders = computed(() => csvRows.value[0] ? Object.keys(csvRows.value[0
               :format="artifactContentFormat"
             />
 
-            <pre
+            <JsonViewer
               v-else-if="data.content && effectiveType === 'json'"
-              class="overflow-auto rounded-xl border border-default bg-elevated/40 p-4 text-sm"
-            >{{ formattedJson }}</pre>
+              :data="data.content"
+            />
 
             <div v-else-if="data.content && effectiveType === 'csv'" class="overflow-x-auto rounded-xl border border-default">
               <table class="min-w-full divide-y divide-default text-sm">
@@ -130,10 +136,10 @@ const csvHeaders = computed(() => csvRows.value[0] ? Object.keys(csvRows.value[0
               </table>
             </div>
 
-            <pre
+            <ContentRenderer
               v-else-if="data.content"
-              class="overflow-auto rounded-xl border border-default bg-elevated/40 p-4 text-sm whitespace-pre-wrap"
-            >{{ data.content }}</pre>
+              :content="data.content"
+            />
 
             <p v-else class="text-sm text-muted">
               This artifact was stored in Supabase Storage. Use the download action to open the signed URL.

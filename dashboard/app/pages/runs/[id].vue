@@ -179,7 +179,7 @@ async function resolveReview(nextStatus: 'approved' | 'rejected' | 'edited') {
             </p>
           </div>
 
-          <ReadOnlyMarkdown :content="run.tasks.prompt" format="text" />
+          <ContentRenderer :content="run.tasks.prompt" />
         </div>
       </UCard>
 

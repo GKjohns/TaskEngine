@@ -3,11 +3,12 @@ import type { ArtifactRecord, NodeRunRecord, PlanNode } from '../../shared/types
 import {
   formatDateTime,
   formatDuration,
-  formatJson,
   nodeRunStatusColorMap,
   nodeTypeBadgeColor,
   truncateText
 } from '../utils/taskEngine'
+
+const expandedCalls = ref(new Set<number>())
 
 const props = defineProps<{
   nodeRun: NodeRunRecord
@@ -20,7 +21,6 @@ const logs = computed<Record<string, unknown>>(() => props.nodeRun.logs || {})
 const toolCalls = computed(() => Array.isArray(logs.value.tool_calls) ? logs.value.tool_calls as Array<Record<string, unknown>> : [])
 const perArtifactCalls = computed(() => Array.isArray(logs.value.calls) ? logs.value.calls as Array<Record<string, unknown>> : [])
 const errorMessage = computed(() => typeof logs.value.error === 'string' ? logs.value.error : '')
-const logJson = computed(() => formatJson(logs.value))
 </script>
 
 <template>
@@ -101,20 +101,54 @@ const logJson = computed(() => formatJson(logs.value))
             <div
               v-for="(call, index) in toolCalls"
               :key="`${String(call.name || 'tool')}-${index}`"
-              class="rounded-xl border border-default bg-elevated/40 p-3 text-sm"
+              class="rounded-xl border border-default bg-elevated/40 text-sm overflow-hidden"
             >
-              <div class="flex flex-wrap items-center gap-2">
-                <span class="font-medium text-highlighted">{{ call.name || 'tool' }}</span>
-                <UBadge :color="call.isError ? 'error' : 'neutral'" variant="soft">
-                  {{ call.isError ? 'error' : 'ok' }}
-                </UBadge>
+              <button
+                class="flex w-full items-center justify-between gap-2 p-3 text-left hover:bg-elevated/60 transition-colors cursor-pointer"
+                @click="expandedCalls.has(index) ? expandedCalls.delete(index) : expandedCalls.add(index)"
+              >
+                <div class="flex flex-wrap items-center gap-2">
+                  <UIcon
+                    name="i-lucide-chevron-right"
+                    class="size-3.5 text-muted transition-transform"
+                    :class="{ 'rotate-90': expandedCalls.has(index) }"
+                  />
+                  <span class="font-medium text-highlighted">{{ call.name || 'tool' }}</span>
+                  <UBadge :color="call.isError ? 'error' : 'neutral'" variant="soft">
+                    {{ call.isError ? 'error' : 'ok' }}
+                  </UBadge>
+                </div>
+                <span v-if="!expandedCalls.has(index)" class="text-xs text-muted truncate max-w-xs">
+                  {{ truncateText(String(call.output || ''), 60) }}
+                </span>
+              </button>
+
+              <div v-if="expandedCalls.has(index)" class="border-t border-default p-3 space-y-3">
+                <div class="space-y-1.5">
+                  <p class="text-xs font-medium text-muted uppercase tracking-wide">
+                    Input
+                  </p>
+                  <JsonViewer
+                    v-if="call.input && typeof call.input === 'object'"
+                    :data="call.input as Record<string, unknown>"
+                    compact
+                  />
+                  <ContentRenderer
+                    v-else
+                    :content="String(call.input ?? '')"
+                    compact
+                  />
+                </div>
+                <div class="space-y-1.5">
+                  <p class="text-xs font-medium text-muted uppercase tracking-wide">
+                    Output
+                  </p>
+                  <ContentRenderer
+                    :content="String(call.output || '')"
+                    compact
+                  />
+                </div>
               </div>
-              <p class="mt-2 text-muted">
-                Input: {{ truncateText(formatJson(call.input as string | Record<string, unknown> | unknown[] | null | undefined), 140) }}
-              </p>
-              <p class="mt-1 text-muted">
-                Output: {{ truncateText(String(call.output || ''), 180) }}
-              </p>
             </div>
           </div>
         </div>
@@ -146,7 +180,7 @@ const logJson = computed(() => formatJson(logs.value))
           <h4 class="text-sm font-medium text-highlighted">
             Raw logs
           </h4>
-          <ReadOnlyMarkdown :content="logJson" format="json" mono />
+          <JsonViewer :data="logs" />
         </div>
       </div>
     </details>

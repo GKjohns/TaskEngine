@@ -62,3 +62,15 @@
   --ui-border-accented: #303030;
   --ui-border-inverted: white;
 }
+
+.json-key { color: #2563EB; }
+.json-string { color: #16A34A; }
+.json-number { color: #D97706; }
+.json-boolean { color: #9333EA; }
+.json-null { color: #737373; font-style: italic; }
+
+.dark .json-key { color: #60A5FA; }
+.dark .json-string { color: #4ADE80; }
+.dark .json-number { color: #FBBF24; }
+.dark .json-boolean { color: #C084FC; }
+.dark .json-null { color: #A3A3A3; }
