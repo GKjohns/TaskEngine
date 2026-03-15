@@ -7,26 +7,22 @@ defineProps<{
 </script>
 
 <template>
-  <section class="min-h-screen">
-    <header class="border-b border-default px-6 py-4">
-      <div class="flex items-center justify-between gap-4">
-        <div>
-          <h1 class="text-xl font-semibold text-highlighted">
-            {{ title }}
-          </h1>
-        </div>
+  <UDashboardPanel>
+    <template #header>
+      <UDashboardNavbar :title="title">
+        <template #right>
+          <UButton
+            v-if="actionLabel && actionTo"
+            :label="actionLabel"
+            :to="actionTo"
+            icon="i-lucide-plus"
+          />
+        </template>
+      </UDashboardNavbar>
+    </template>
 
-        <UButton
-          v-if="actionLabel && actionTo"
-          :label="actionLabel"
-          :to="actionTo"
-          icon="i-lucide-plus"
-        />
-      </div>
-    </header>
-
-    <div class="p-6">
+    <template #body>
       <slot />
-    </div>
-  </section>
+    </template>
+  </UDashboardPanel>
 </template>

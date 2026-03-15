@@ -3,7 +3,7 @@
 **A bare-bones, general-purpose agentic workspace for text-native work.**
 Last updated: 2026-03-14
 
-> **Status: NOT STARTED**
+> **Status: Sprint 0 complete, Sprint 1 next**
 > Reference docs: `internal_docs/20260314_mvp_build/vision.md`, `internal_docs/openai_usage.md`
 
 ---
@@ -499,16 +499,16 @@ npm run dev
 
 ### Definition of Done
 
-- [ ] Nuxt 4 app running with dashboard template layout
-- [ ] Supabase configured for database/storage, with no auth flow in development
-- [ ] Jobs table has full lifecycle statuses: idle, scheduled, running, waiting_review, paused, completed, failed
-- [ ] No user model, RLS, or login flow required during development
-- [ ] `createServiceClient()` available for Inngest functions and server routes
-- [ ] Dashboard layout with sidebar navigation for all 5 views
-- [ ] Placeholder pages for tasks, runs, artifacts, reviews, jobs
-- [ ] App opens directly into the dashboard
-- [ ] UI work stays close to the upstream template baseline to preserve local dev stability
-- [ ] `.env.example` with all required vars
+- [x] Nuxt 4 app running with dashboard template layout
+- [x] Supabase configured for database/storage, with no auth flow in development
+- [x] Jobs table has full lifecycle statuses: idle, scheduled, running, waiting_review, paused, completed, failed
+- [x] No user model, RLS, or login flow required during development
+- [x] `createServiceClient()` available for Inngest functions and server routes
+- [x] Dashboard layout with sidebar navigation for all 5 views
+- [x] Placeholder pages for tasks, runs, artifacts, reviews, jobs
+- [x] App opens directly into the dashboard
+- [x] UI work stays close to the upstream template baseline to preserve local dev stability
+- [x] `.env.example` with all required vars
 
 ### New Dependencies
 

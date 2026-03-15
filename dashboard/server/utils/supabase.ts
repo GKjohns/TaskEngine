@@ -1,15 +1,17 @@
 import { createClient } from '@supabase/supabase-js'
 
-// During single-user local development, all server-side DB access uses the service role.
-export function createServiceClient() {
-  const supabaseUrl = process.env.SUPABASE_URL
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_KEY
+let _serviceClient: ReturnType<typeof createClient> | null = null
 
-  if (!supabaseUrl || !serviceRoleKey) {
+export function createServiceClient() {
+  if (_serviceClient) return _serviceClient
+
+  const config = useRuntimeConfig()
+  if (!config.supabaseUrl || !config.supabaseServiceKey) {
     throw new Error('SUPABASE_URL and SUPABASE_SERVICE_KEY must be set')
   }
 
-  return createClient(supabaseUrl, serviceRoleKey)
+  _serviceClient = createClient(config.supabaseUrl, config.supabaseServiceKey)
+  return _serviceClient
 }
 
 export const createDatabaseClient = createServiceClient
