@@ -5,6 +5,23 @@ import type { NodeExecutor } from './types'
 
 const MODEL = 'gpt-5.4'
 
+function inferOutputType(output: string): 'json' | 'text' {
+  try {
+    JSON.parse(output)
+    return 'json'
+  } catch {
+    return 'text'
+  }
+}
+
+function defaultOutputTitle(nodeTitle: string | null, sourceTitle?: string) {
+  if (nodeTitle) {
+    return sourceTitle ? `${nodeTitle} - ${sourceTitle}` : nodeTitle
+  }
+
+  return sourceTitle ? `${sourceTitle} result` : 'Agent Code Result'
+}
+
 function buildInstructions(prompt: string | null) {
   return [
     'You are a code execution agent in Task Engine.',
@@ -32,9 +49,9 @@ export const agentCode: NodeExecutor = async (node, context) => {
       })
 
       artifacts.push({
-        title: node.title ? `${node.title} - ${artifact.title}` : `${artifact.title} code output`,
+        title: defaultOutputTitle(node.title, artifact.title),
         content: result.output,
-        type: 'text' as const
+        type: inferOutputType(result.output)
       })
       calls.push({
         artifact_id: artifact.id,
@@ -71,9 +88,9 @@ export const agentCode: NodeExecutor = async (node, context) => {
 
   return {
     artifacts: [{
-      title: node.title || 'Code Output',
+      title: defaultOutputTitle(node.title),
       content: result.output,
-      type: 'text'
+      type: inferOutputType(result.output)
     }],
     logs: {
       model: MODEL,

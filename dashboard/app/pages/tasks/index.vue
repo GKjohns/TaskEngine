@@ -1,6 +1,11 @@
 <script setup lang="ts">
-import type { TaskRecord, RunRecord } from '../../../shared/types/task-engine'
-import { formatDateTime, formatRelativeCount } from '../../utils/taskEngine'
+import type { JobRecord, RunRecord, TaskRecord } from '../../../shared/types/task-engine'
+import {
+  formatDateTime,
+  formatRelativeCount,
+  formatRelativeTime,
+  taskStatusColorMap
+} from '../../utils/taskEngine'
 
 interface TaskListItem extends TaskRecord {
   plans?: Array<{
@@ -9,19 +14,19 @@ interface TaskListItem extends TaskRecord {
     created_at: string
   }>
   runs?: Array<Pick<RunRecord, 'id' | 'status' | 'started_at' | 'completed_at'>>
+  jobs?: Array<Pick<JobRecord, 'id' | 'job_type' | 'status' | 'next_run_at' | 'last_run_at' | 'last_error'>>
 }
-
-const statusColorMap = {
-  active: 'success',
-  paused: 'warning',
-  archived: 'neutral'
-} as const
 
 const triggerColorMap = {
   manual: 'neutral',
   scheduled: 'primary',
   heartbeat: 'info'
 } as const
+
+const filters = ['all', 'active', 'paused', 'archived'] as const
+const activeFilter = ref<'all' | 'active' | 'paused' | 'archived'>('active')
+const pendingTaskId = ref<string | null>(null)
+const actionError = ref('')
 
 const { data, status, error, refresh } = await useFetch<TaskListItem[]>('/api/tasks', {
   default: () => []
@@ -39,10 +44,49 @@ const tasks = computed(() => (data.value || []).map((task) => {
     ...task,
     latestPlanVersion: plans[0]?.version ?? null,
     latestRun: runs[0] ?? null,
+    primaryJob: (task.jobs || [])[0] ?? null,
     planCount: plans.length,
     runCount: runs.length
   }
 }))
+
+const visibleTasks = computed(() => tasks.value.filter(task =>
+  activeFilter.value === 'all' ? true : task.status === activeFilter.value
+))
+
+async function updateTask(taskId: string, payload: Partial<Pick<TaskRecord, 'status'>>) {
+  pendingTaskId.value = taskId
+  actionError.value = ''
+
+  try {
+    await $fetch(`/api/tasks/${taskId}`, {
+      method: 'PATCH',
+      body: payload
+    })
+    await refresh()
+  } catch (error) {
+    actionError.value = error instanceof Error ? error.message : 'Failed to update the task.'
+  } finally {
+    pendingTaskId.value = null
+  }
+}
+
+async function runTask(taskId: string) {
+  pendingTaskId.value = taskId
+  actionError.value = ''
+
+  try {
+    await $fetch('/api/runs', {
+      method: 'POST',
+      body: { task_id: taskId }
+    })
+    await refresh()
+  } catch (error) {
+    actionError.value = error instanceof Error ? error.message : 'Failed to start the run.'
+  } finally {
+    pendingTaskId.value = null
+  }
+}
 </script>
 
 <template>
@@ -54,7 +98,7 @@ const tasks = computed(() => (data.value || []).map((task) => {
             Your task library
           </h2>
           <p class="mt-1 text-sm text-muted">
-            Create a task from natural language, generate a plan, and inspect the latest run state from one place.
+            Filter active work, inspect the latest plan version, and launch runs directly from the dashboard.
           </p>
         </div>
 
@@ -74,6 +118,19 @@ const tasks = computed(() => (data.value || []).map((task) => {
         </div>
       </div>
 
+      <div class="flex flex-wrap gap-2">
+        <UButton
+          v-for="filter in filters"
+          :key="filter"
+          color="neutral"
+          size="sm"
+          :variant="activeFilter === filter ? 'solid' : 'soft'"
+          @click="activeFilter = filter"
+        >
+          {{ filter }}
+        </UButton>
+      </div>
+
       <UAlert
         v-if="error"
         color="error"
@@ -81,17 +138,24 @@ const tasks = computed(() => (data.value || []).map((task) => {
         title="Could not load tasks"
         :description="error.message"
       />
+      <UAlert
+        v-else-if="actionError"
+        color="error"
+        variant="soft"
+        title="Task action failed"
+        :description="actionError"
+      />
 
       <PageEmptyState
-        v-else-if="!tasks.length && status !== 'pending'"
-        title="No tasks yet"
-        description="Create your first task to generate a plan and prepare the engine for execution."
+        v-else-if="!visibleTasks.length && status !== 'pending'"
+        title="No tasks in this view"
+        description="Create a task or switch filters to see more work."
         icon="i-lucide-list-checks"
       />
 
       <div v-else class="grid gap-4 xl:grid-cols-2">
         <UCard
-          v-for="task in tasks"
+          v-for="task in visibleTasks"
           :key="task.id"
           class="border border-default"
         >
@@ -102,7 +166,7 @@ const tasks = computed(() => (data.value || []).map((task) => {
                   {{ task.title }}
                 </NuxtLink>
                 <div class="flex flex-wrap items-center gap-2">
-                  <UBadge :color="statusColorMap[task.status]" variant="soft">
+                  <UBadge :color="taskStatusColorMap[task.status]" variant="soft">
                     {{ task.status }}
                   </UBadge>
                   <UBadge :color="triggerColorMap[task.trigger_type]" variant="subtle">
@@ -128,7 +192,7 @@ const tasks = computed(() => (data.value || []).map((task) => {
               {{ task.prompt }}
             </p>
 
-            <div class="grid gap-3 text-sm text-toned sm:grid-cols-2">
+            <div class="grid gap-3 text-sm text-toned sm:grid-cols-2 lg:grid-cols-3">
               <div>
                 <p class="font-medium text-highlighted">
                   Created
@@ -139,7 +203,13 @@ const tasks = computed(() => (data.value || []).map((task) => {
                 <p class="font-medium text-highlighted">
                   Latest run
                 </p>
-                <p>{{ task.latestRun ? `${task.latestRun.status} · ${formatDateTime(task.latestRun.started_at)}` : 'No runs yet' }}</p>
+                <p>{{ task.latestRun ? `${task.latestRun.status} · ${formatRelativeTime(task.latestRun.started_at)}` : 'No runs yet' }}</p>
+              </div>
+              <div>
+                <p class="font-medium text-highlighted">
+                  Next run
+                </p>
+                <p>{{ formatDateTime(task.primaryJob?.next_run_at) }}</p>
               </div>
               <div>
                 <p class="font-medium text-highlighted">
@@ -153,6 +223,64 @@ const tasks = computed(() => (data.value || []).map((task) => {
                 </p>
                 <p>{{ formatRelativeCount(task.runCount, 'run') }}</p>
               </div>
+              <div>
+                <p class="font-medium text-highlighted">
+                  Last job
+                </p>
+                <p>{{ task.primaryJob?.status || 'Not scheduled' }}</p>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap gap-2 border-t border-default pt-4">
+              <UButton
+                v-if="task.status !== 'archived' && task.latestPlanVersion"
+                size="sm"
+                icon="i-lucide-play"
+                :loading="pendingTaskId === task.id"
+                @click="runTask(task.id)"
+              >
+                Run now
+              </UButton>
+              <UButton
+                v-if="task.status === 'active' && (task.trigger_type !== 'manual' || ['scheduled', 'running', 'waiting_review'].includes(task.primaryJob?.status ?? ''))"
+                color="warning"
+                variant="soft"
+                size="sm"
+                :loading="pendingTaskId === task.id"
+                @click="updateTask(task.id, { status: 'paused' })"
+              >
+                Pause
+              </UButton>
+              <UButton
+                v-if="task.status === 'paused'"
+                color="success"
+                variant="soft"
+                size="sm"
+                :loading="pendingTaskId === task.id"
+                @click="updateTask(task.id, { status: 'active' })"
+              >
+                Resume
+              </UButton>
+              <UButton
+                v-if="task.status === 'archived'"
+                color="success"
+                variant="soft"
+                size="sm"
+                :loading="pendingTaskId === task.id"
+                @click="updateTask(task.id, { status: 'active' })"
+              >
+                Restore
+              </UButton>
+              <UButton
+                v-if="task.status !== 'archived'"
+                color="neutral"
+                variant="soft"
+                size="sm"
+                :loading="pendingTaskId === task.id"
+                @click="updateTask(task.id, { status: 'archived' })"
+              >
+                Archive
+              </UButton>
             </div>
           </div>
         </UCard>

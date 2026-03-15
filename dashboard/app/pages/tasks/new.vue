@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { z } from 'zod'
-import type { TaskTriggerType } from '../../../shared/types/task-engine'
+import type { Plan, TaskTriggerType } from '../../../shared/types/task-engine'
 
 const router = useRouter()
 
@@ -47,26 +47,62 @@ const form = reactive<TaskFormState>({
 })
 
 const pending = ref(false)
+const creating = ref(false)
 const errorMessage = ref('')
+const plan = ref<Plan | null>(null)
+const validationErrors = ref<string[]>([])
 
-async function submit() {
+const canPreview = computed(() => form.title.trim() && form.prompt.trim())
+
+function buildScheduleConfig() {
+  return form.trigger_type === 'manual' || !form.next_run_at
+    ? {}
+    : {
+        next_run_at: new Date(form.next_run_at).toISOString()
+      }
+}
+
+async function generatePreview() {
   pending.value = true
   errorMessage.value = ''
 
   try {
-    const schedule_config = form.trigger_type === 'manual' || !form.next_run_at
-      ? {}
-      : {
-          next_run_at: new Date(form.next_run_at).toISOString()
-        }
+    const response = await $fetch<{ plan: Plan, validation_errors: string[] }>('/api/tasks/preview', {
+      method: 'POST',
+      body: {
+        title: form.title,
+        prompt: form.prompt,
+        trigger_type: form.trigger_type,
+        schedule_config: buildScheduleConfig()
+      }
+    })
 
+    plan.value = response.plan
+    validationErrors.value = response.validation_errors || []
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : 'Something went wrong while generating the plan preview.'
+  } finally {
+    pending.value = false
+  }
+}
+
+async function createTask() {
+  if (!plan.value) {
+    return
+  }
+
+  creating.value = true
+  errorMessage.value = ''
+
+  try {
     const response = await $fetch<{ task: { id: string } }>('/api/tasks', {
       method: 'POST',
       body: {
         title: form.title,
         prompt: form.prompt,
         trigger_type: form.trigger_type,
-        schedule_config
+        schedule_config: buildScheduleConfig(),
+        plan_json: plan.value
       }
     })
 
@@ -74,7 +110,7 @@ async function submit() {
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'Something went wrong while creating the task.'
   } finally {
-    pending.value = false
+    creating.value = false
   }
 }
 </script>
@@ -104,7 +140,7 @@ async function submit() {
           :schema="taskSchema"
           :state="form"
           class="space-y-6"
-          @submit="submit"
+          @submit="generatePreview"
         >
           <div class="grid gap-6">
             <UFormField
@@ -195,11 +231,55 @@ async function submit() {
             <UButton color="neutral" variant="ghost" to="/tasks">
               Cancel
             </UButton>
-            <UButton type="submit" icon="i-lucide-wand-sparkles" :loading="pending">
-              Generate task plan
+            <UButton
+              type="submit"
+              icon="i-lucide-wand-sparkles"
+              :loading="pending"
+              :disabled="!canPreview"
+            >
+              Generate plan preview
             </UButton>
           </div>
         </UForm>
+      </UCard>
+
+      <UCard v-if="plan" class="border border-default">
+        <div class="space-y-5">
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 class="text-base font-semibold text-highlighted">
+                Generated plan
+              </h3>
+              <p class="mt-1 text-sm text-muted">
+                Review the planned node graph before creating the task and durable job.
+              </p>
+            </div>
+
+            <div class="flex flex-wrap gap-2">
+              <UButton
+                color="neutral"
+                variant="soft"
+                :loading="pending"
+                @click="generatePreview"
+              >
+                Re-generate
+              </UButton>
+              <UButton icon="i-lucide-check" :loading="creating" @click="createTask">
+                Create task
+              </UButton>
+            </div>
+          </div>
+
+          <UAlert
+            v-if="validationErrors.length"
+            color="warning"
+            variant="soft"
+            title="Plan validation warnings"
+            :description="validationErrors.join(' ')"
+          />
+
+          <PlanGraph :nodes="plan.nodes" />
+        </div>
       </UCard>
     </div>
   </DashboardPage>

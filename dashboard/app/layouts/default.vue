@@ -1,34 +1,19 @@
 <script setup lang="ts">
-import type { NavigationMenuItem } from '@nuxt/ui'
-
+const route = useRoute()
 const open = ref(false)
+const { pendingReviewCount } = useDashboard()
 
-const links: NavigationMenuItem[][] = [[{
-  label: 'Tasks',
-  icon: 'i-lucide-list-checks',
-  to: '/tasks',
-  onSelect: () => { open.value = false }
-}, {
-  label: 'Runs',
-  icon: 'i-lucide-play-circle',
-  to: '/runs',
-  onSelect: () => { open.value = false }
-}, {
-  label: 'Artifacts',
-  icon: 'i-lucide-file-text',
-  to: '/artifacts',
-  onSelect: () => { open.value = false }
-}, {
-  label: 'Reviews',
-  icon: 'i-lucide-message-circle-warning',
-  to: '/reviews',
-  onSelect: () => { open.value = false }
-}, {
-  label: 'Jobs',
-  icon: 'i-lucide-clock',
-  to: '/jobs',
-  onSelect: () => { open.value = false }
-}]]
+const links = [
+  { id: 'tasks', label: 'Tasks', icon: 'i-lucide-list-checks', to: '/tasks' },
+  { id: 'runs', label: 'Runs', icon: 'i-lucide-play-circle', to: '/runs' },
+  { id: 'artifacts', label: 'Artifacts', icon: 'i-lucide-file-text', to: '/artifacts' },
+  { id: 'reviews', label: 'Reviews', icon: 'i-lucide-message-circle-warning', to: '/reviews' },
+  { id: 'jobs', label: 'Jobs', icon: 'i-lucide-clock', to: '/jobs' }
+] as const
+
+function isActiveLink(path: string) {
+  return route.path === path || route.path.startsWith(`${path}/`)
+}
 </script>
 
 <template>
@@ -42,18 +27,47 @@ const links: NavigationMenuItem[][] = [[{
       :ui="{ footer: 'lg:border-t lg:border-default' }"
     >
       <template #header="{ collapsed }">
-        <div class="flex items-center" :class="collapsed ? 'justify-center' : 'gap-2.5 px-1'">
-          <AppLogo :size="collapsed ? 20 : 22" :show-wordmark="!collapsed" />
+        <div class="flex w-full items-center justify-center px-1">
+          <AppLogo :size="collapsed ? 24 : 32" :show-wordmark="!collapsed" />
         </div>
       </template>
 
       <template #default="{ collapsed }">
-        <UNavigationMenu
-          :collapsed="collapsed"
-          :items="links[0]"
-          orientation="vertical"
-          tooltip
-        />
+        <nav class="space-y-1 px-2 py-2">
+          <UTooltip
+            v-for="link in links"
+            :key="link.id"
+            :text="link.label"
+            :disabled="!collapsed"
+            :content="{ side: 'right' }"
+          >
+            <NuxtLink
+              :to="link.to"
+              class="flex items-center justify-between rounded-lg px-3 py-2 text-sm transition"
+              :class="[
+                isActiveLink(link.to)
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted hover:bg-elevated hover:text-highlighted',
+                collapsed ? 'justify-center px-2' : ''
+              ]"
+              @click="open = false"
+            >
+              <div class="flex min-w-0 items-center" :class="collapsed ? 'w-full justify-center' : 'gap-3'">
+                <UIcon :name="link.icon" class="size-4 shrink-0" />
+                <span v-if="!collapsed" class="truncate">{{ link.label }}</span>
+              </div>
+
+              <UBadge
+                v-if="!collapsed && link.id === 'reviews' && pendingReviewCount"
+                color="warning"
+                variant="soft"
+                size="xs"
+              >
+                {{ pendingReviewCount }}
+              </UBadge>
+            </NuxtLink>
+          </UTooltip>
+        </nav>
       </template>
 
       <template #footer="{ collapsed }">

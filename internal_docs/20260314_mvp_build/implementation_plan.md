@@ -1943,20 +1943,20 @@ curl http://localhost:3000/api/runs/<run-id>
 
 ### Definition of Done
 
-- [ ] Inngest configured with serve endpoint
-- [ ] Node executor registry with executors for all infrastructure and simple LLM types
-- [ ] `llm_summarize`, `llm_classify`, `llm_extract`, `llm_transform` use appropriate model tiers
-- [ ] `per_artifact` flag: when true, LLM executors iterate per artifact; when false, they batch
-- [ ] `retrieve`, `emit`, `branch`, `notify`, `wait` infrastructure nodes work
-- [ ] `review` node creates review record and pauses the run
-- [ ] Run executor walks plan graph topologically with per-node durable steps
-- [ ] Input artifacts loaded from DB (not in-memory) — survives Inngest replays after review waits
-- [ ] Job status updated at each lifecycle transition: running, waiting_review, completed, failed
-- [ ] Review resolution sends Inngest event and resumes the run (updates job status)
-- [ ] Trigger API creates run via job, fires Inngest event with jobId
-- [ ] Heartbeat cron queries jobs table, creates run record before firing event
-- [ ] Runs, node_runs, and artifacts tables are populated during execution
-- [ ] Jobs API: list (with status filter), pause/resume
+- [x] Inngest configured with serve endpoint
+- [x] Node executor registry with executors for all infrastructure and simple LLM types
+- [x] `llm_summarize`, `llm_classify`, `llm_extract`, `llm_transform` use appropriate model tiers
+- [x] `per_artifact` flag: when true, LLM executors iterate per artifact; when false, they batch
+- [x] `retrieve`, `emit`, `branch`, `notify`, `wait` infrastructure nodes work
+- [x] `review` node creates review record and pauses the run
+- [x] Run executor walks plan graph topologically with per-node durable steps
+- [x] Input artifacts loaded from DB (not in-memory) — survives Inngest replays after review waits
+- [x] Job status updated at each lifecycle transition: running, waiting_review, completed, failed
+- [x] Review resolution sends Inngest event and resumes the run (updates job status)
+- [x] Trigger API creates run via job, fires Inngest event with jobId
+- [x] Heartbeat cron queries jobs table, creates run record before firing event
+- [x] Runs, node_runs, and artifacts tables are populated during execution
+- [x] Jobs API: list (with status filter), pause/resume
 
 ---
 
@@ -2406,14 +2406,14 @@ curl http://localhost:3000/api/runs/<run-id>
 
 ### Definition of Done
 
-- [ ] `runAgentLoop` implements the ReAct while loop with `previous_response_id` for state
-- [ ] Function calling works: model calls tools, results fed back, loop continues
-- [ ] Tool registry: `read_artifact`, `write_artifact`, `search_artifacts`, `run_python`
-- [ ] `agent_transform` executor uses `gpt-5.4` with tools and high reasoning effort
-- [ ] `agent_code` executor generates and runs Python in a sandboxed subprocess
-- [ ] Tool errors are caught and returned to the model (never crash the loop)
-- [ ] Max iterations safety cap works
-- [ ] All node executors registered in the registry
+- [x] `runAgentLoop` implements the ReAct while loop with `previous_response_id` for state
+- [x] Function calling works: model calls tools, results fed back, loop continues
+- [x] Tool registry: `read_artifact`, `write_artifact`, `search_artifacts`, `run_python`
+- [x] `agent_transform` executor uses `gpt-5.4` with tools and high reasoning effort
+- [x] `agent_code` executor generates and runs Python in a sandboxed subprocess
+- [x] Tool errors are caught and returned to the model (never crash the loop)
+- [x] Max iterations safety cap works
+- [x] All node executors registered in the registry
 
 ---
 

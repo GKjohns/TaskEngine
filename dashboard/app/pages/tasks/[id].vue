@@ -1,6 +1,13 @@
 <script setup lang="ts">
-import type { JobRecord, PlanNode, PlanRecord, RunRecord, TaskRecord } from '../../../shared/types/task-engine'
-import { formatDateTime } from '../../utils/taskEngine'
+import type { JobRecord, PlanRecord, RunRecord, TaskRecord } from '../../../shared/types/task-engine'
+import {
+  formatDateTime,
+  formatDuration,
+  formatRelativeTime,
+  jobStatusColorMap,
+  runStatusColorMap,
+  taskStatusColorMap
+} from '../../utils/taskEngine'
 
 interface TaskDetail extends TaskRecord {
   plans?: PlanRecord[]
@@ -18,39 +25,14 @@ const triggerColorMap = {
   heartbeat: 'info'
 } as const
 
-const taskStatusColorMap = {
-  active: 'success',
-  paused: 'warning',
-  archived: 'neutral'
-} as const
-
-const runStatusColorMap = {
-  pending: 'neutral',
-  running: 'primary',
-  waiting_review: 'warning',
-  completed: 'success',
-  failed: 'error',
-  cancelled: 'neutral'
-} as const
-
-const jobStatusColorMap = {
-  idle: 'neutral',
-  scheduled: 'primary',
-  running: 'primary',
-  waiting_review: 'warning',
-  paused: 'warning',
-  completed: 'success',
-  failed: 'error'
-} as const
-
 const { data, status, error, refresh } = await useFetch<TaskDetail>(`/api/tasks/${taskId.value}`, {
   key: `task-${taskId.value}`
 })
 
 const replanPending = ref(false)
-const replanError = ref('')
-const runPending = ref(false)
-const runError = ref('')
+const actionPending = ref(false)
+const pageError = ref('')
+const selectedNodeId = ref<string | null>(null)
 
 const task = computed(() => data.value)
 const plans = computed(() => [...(task.value?.plans || [])].sort((a, b) => b.version - a.version))
@@ -61,28 +43,22 @@ const runs = computed(() => [...(task.value?.runs || [])].sort((a, b) => {
   return bTime - aTime
 }))
 const jobs = computed(() => task.value?.jobs || [])
+const selectedNode = computed(() => latestPlan.value?.plan_json.nodes.find(node => node.id === selectedNodeId.value) || latestPlan.value?.plan_json.nodes[0] || null)
 
-function nodeDetails(node: PlanNode) {
-  const details: string[] = []
+watch(latestPlan, (plan) => {
+  if (!plan) {
+    selectedNodeId.value = null
+    return
+  }
 
-  if (node.labels?.length) details.push(`Labels: ${node.labels.join(', ')}`)
-  if (node.max_length) details.push(`Max length: ${node.max_length}`)
-  if (node.source) details.push(`Source: ${node.source}`)
-  if (node.filter) details.push(`Filter: ${node.filter}`)
-  if (node.condition) details.push(`Condition: ${node.condition}`)
-  if (node.if_true_node) details.push(`If true: ${node.if_true_node}`)
-  if (node.if_false_node) details.push(`If false: ${node.if_false_node}`)
-  if (node.duration) details.push(`Duration: ${node.duration}`)
-  if (node.title) details.push(`Output title: ${node.title}`)
-  if (node.format) details.push(`Format: ${node.format}`)
-  if (node.level) details.push(`Level: ${node.level}`)
-
-  return details
-}
+  if (!selectedNodeId.value || !plan.plan_json.nodes.some(node => node.id === selectedNodeId.value)) {
+    selectedNodeId.value = plan.plan_json.nodes[0]?.id || null
+  }
+}, { immediate: true })
 
 async function replanTask() {
   replanPending.value = true
-  replanError.value = ''
+  pageError.value = ''
 
   try {
     await $fetch(`/api/tasks/${taskId.value}/replan`, {
@@ -90,15 +66,15 @@ async function replanTask() {
     })
     await refresh()
   } catch (error) {
-    replanError.value = error instanceof Error ? error.message : 'Failed to generate a new plan version.'
+    pageError.value = error instanceof Error ? error.message : 'Failed to generate a new plan version.'
   } finally {
     replanPending.value = false
   }
 }
 
 async function startRun() {
-  runPending.value = true
-  runError.value = ''
+  actionPending.value = true
+  pageError.value = ''
 
   try {
     const run = await $fetch<RunRecord>('/api/runs', {
@@ -110,9 +86,26 @@ async function startRun() {
     await refresh()
     await router.push(`/runs/${run.id}`)
   } catch (error) {
-    runError.value = error instanceof Error ? error.message : 'Failed to start a run.'
+    pageError.value = error instanceof Error ? error.message : 'Failed to start a run.'
   } finally {
-    runPending.value = false
+    actionPending.value = false
+  }
+}
+
+async function updateTaskStatus(nextStatus: TaskRecord['status']) {
+  actionPending.value = true
+  pageError.value = ''
+
+  try {
+    await $fetch(`/api/tasks/${taskId.value}`, {
+      method: 'PATCH',
+      body: { status: nextStatus }
+    })
+    await refresh()
+  } catch (error) {
+    pageError.value = error instanceof Error ? error.message : 'Failed to update the task.'
+  } finally {
+    actionPending.value = false
   }
 }
 </script>
@@ -133,9 +126,12 @@ async function startRun() {
               {{ latestPlan ? `Latest plan v${latestPlan.version}` : 'No plan yet' }}
             </UBadge>
           </div>
+          <p class="text-sm text-muted">
+            Task detail combines the prompt, current plan, job status, and recent run history in one place.
+          </p>
         </div>
 
-        <div class="flex items-center gap-3">
+        <div class="flex flex-wrap gap-2">
           <UButton
             color="neutral"
             variant="soft"
@@ -148,7 +144,7 @@ async function startRun() {
           <UButton
             color="primary"
             icon="i-lucide-play"
-            :loading="runPending"
+            :loading="actionPending"
             :disabled="!latestPlan"
             @click="startRun"
           >
@@ -156,6 +152,33 @@ async function startRun() {
           </UButton>
           <UButton icon="i-lucide-sparkles" :loading="replanPending" @click="replanTask">
             Replan
+          </UButton>
+          <UButton
+            v-if="task?.status === 'active'"
+            color="warning"
+            variant="soft"
+            :loading="actionPending"
+            @click="updateTaskStatus('paused')"
+          >
+            Pause
+          </UButton>
+          <UButton
+            v-if="task?.status === 'paused'"
+            color="success"
+            variant="soft"
+            :loading="actionPending"
+            @click="updateTaskStatus('active')"
+          >
+            Resume
+          </UButton>
+          <UButton
+            v-if="task?.status !== 'archived'"
+            color="neutral"
+            variant="soft"
+            :loading="actionPending"
+            @click="updateTaskStatus('archived')"
+          >
+            Archive
           </UButton>
         </div>
       </div>
@@ -167,13 +190,12 @@ async function startRun() {
         title="Could not load task details"
         :description="error.message"
       />
-
       <UAlert
-        v-else-if="replanError || runError"
+        v-else-if="pageError"
         color="error"
         variant="soft"
-        :title="replanError ? 'Replan failed' : 'Run failed'"
-        :description="replanError || runError"
+        title="Task action failed"
+        :description="pageError"
       />
 
       <UCard v-if="task?.prompt" class="border border-default">
@@ -183,7 +205,7 @@ async function startRun() {
               Task prompt
             </h2>
             <p class="mt-1 text-sm text-muted">
-              The natural-language request used to generate this task and its latest plan.
+              The natural-language request that produced the task and current plan.
             </p>
           </div>
 
@@ -191,16 +213,13 @@ async function startRun() {
         </div>
       </UCard>
 
-      <div v-if="task" class="grid gap-4 xl:grid-cols-[1.2fr,0.8fr]">
+      <div v-if="task" class="grid gap-4 xl:grid-cols-[0.9fr,1.1fr]">
         <UCard class="border border-default">
           <div class="space-y-4">
             <div>
               <h2 class="text-base font-semibold text-highlighted">
                 Task overview
               </h2>
-              <p class="mt-1 text-sm text-muted">
-                Core metadata for the natural-language task and the first runtime job created from it.
-              </p>
             </div>
 
             <div class="grid gap-4 text-sm sm:grid-cols-2">
@@ -246,9 +265,6 @@ async function startRun() {
               <h2 class="text-base font-semibold text-highlighted">
                 Jobs
               </h2>
-              <p class="mt-1 text-sm text-muted">
-                Every task gets a durable job record even before execution begins.
-              </p>
             </div>
 
             <div v-if="jobs.length" class="space-y-3">
@@ -265,14 +281,10 @@ async function startRun() {
                     {{ job.job_type }}
                   </UBadge>
                 </div>
-                <div class="mt-3 space-y-1 text-sm text-muted">
-                  <p>
-                    Next run: {{ formatDateTime(job.next_run_at) }}
-                  </p>
-                  <p>
-                    Last run: {{ formatDateTime(job.last_run_at) }}
-                  </p>
-                  <p v-if="job.last_error">
+                <div class="mt-3 grid gap-2 text-sm text-muted sm:grid-cols-2">
+                  <p>Next run: {{ formatDateTime(job.next_run_at) }}</p>
+                  <p>Last run: {{ formatRelativeTime(job.last_run_at) }}</p>
+                  <p v-if="job.last_error" class="sm:col-span-2">
                     Last error: {{ job.last_error }}
                   </p>
                 </div>
@@ -286,90 +298,100 @@ async function startRun() {
         </UCard>
       </div>
 
-      <UCard v-if="latestPlan" class="border border-default">
-        <div class="space-y-5">
-          <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-            <div>
+      <div v-if="latestPlan" class="grid gap-4 xl:grid-cols-[1fr,0.9fr]">
+        <UCard class="border border-default">
+          <div class="space-y-5">
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h2 class="text-base font-semibold text-highlighted">
+                  Plan graph
+                </h2>
+                <p class="mt-1 text-sm text-muted">
+                  The latest stored execution plan, including whether each node runs per artifact or in batch mode.
+                </p>
+              </div>
+              <UBadge color="neutral" variant="outline">
+                {{ formatDateTime(latestPlan.created_at) }}
+              </UBadge>
+            </div>
+
+            <PlanGraph
+              :nodes="latestPlan.plan_json.nodes"
+              :active-node-id="selectedNodeId"
+              @select="selectedNodeId = $event"
+            />
+          </div>
+        </UCard>
+
+        <UCard class="border border-default">
+          <div v-if="selectedNode" class="space-y-4">
+            <div class="flex flex-wrap items-center gap-2">
               <h2 class="text-base font-semibold text-highlighted">
-                Generated plan
+                {{ selectedNode.id }}
               </h2>
-              <p class="mt-1 text-sm text-muted">
-                Latest version created from the task prompt using the Sprint 1 multi-pass planner.
+              <UBadge color="neutral" variant="outline">
+                {{ selectedNode.type }}
+              </UBadge>
+              <UBadge :color="selectedNode.per_artifact ? 'info' : 'neutral'" variant="soft">
+                {{ selectedNode.per_artifact ? 'Per artifact' : 'Batch' }}
+              </UBadge>
+            </div>
+
+            <p class="text-sm text-muted">
+              {{ selectedNode.description }}
+            </p>
+
+            <div class="grid gap-3 text-sm text-muted">
+              <p>{{ selectedNode.depends_on.length ? `Depends on: ${selectedNode.depends_on.join(', ')}` : 'Root node' }}</p>
+              <p v-if="selectedNode.prompt">
+                Prompt: {{ selectedNode.prompt }}
+              </p>
+              <p v-if="selectedNode.source">
+                Source: {{ selectedNode.source }}
+              </p>
+              <p v-if="selectedNode.condition">
+                Condition: {{ selectedNode.condition }}
+              </p>
+              <p v-if="selectedNode.duration">
+                Duration: {{ selectedNode.duration }}
+              </p>
+              <p v-if="selectedNode.message">
+                Review message: {{ selectedNode.message }}
+              </p>
+              <p v-if="selectedNode.title">
+                Output title: {{ selectedNode.title }}
               </p>
             </div>
-            <UBadge color="neutral" variant="outline">
-              {{ formatDateTime(latestPlan.created_at) }}
-            </UBadge>
           </div>
+        </UCard>
+      </div>
 
-          <div class="space-y-4">
-            <div
-              v-for="node in latestPlan.plan_json.nodes"
-              :key="node.id"
-              class="rounded-xl border border-default p-4"
-            >
-              <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                <div class="space-y-2">
-                  <div class="flex flex-wrap items-center gap-2">
-                    <h3 class="font-semibold text-highlighted">
-                      {{ node.id }}
-                    </h3>
-                    <UBadge color="primary" variant="subtle">
-                      {{ node.type }}
-                    </UBadge>
-                    <UBadge :color="node.per_artifact ? 'info' : 'neutral'" variant="outline">
-                      {{ node.per_artifact ? 'Per artifact' : 'Batch' }}
-                    </UBadge>
-                  </div>
-
-                  <p class="text-sm text-muted">
-                    {{ node.description }}
-                  </p>
-                </div>
-
-                <UBadge color="neutral" variant="soft">
-                  {{ node.depends_on.length ? `Depends on: ${node.depends_on.join(', ')}` : 'Root node' }}
-                </UBadge>
-              </div>
-
-              <ul v-if="nodeDetails(node).length" class="mt-4 space-y-2 text-sm text-muted">
-                <li v-for="detail in nodeDetails(node)" :key="detail">
-                  {{ detail }}
-                </li>
-              </ul>
-
-              <div v-if="node.prompt" class="mt-4 space-y-2">
-                <p class="text-sm font-medium text-highlighted">
-                  Prompt
-                </p>
-                <ReadOnlyMarkdown :content="node.prompt" format="text" />
-              </div>
-
-              <div v-if="node.message" class="mt-4 space-y-2">
-                <p class="text-sm font-medium text-highlighted">
-                  Message
-                </p>
-                <ReadOnlyMarkdown :content="node.message" format="text" />
-              </div>
-            </div>
-          </div>
-        </div>
-      </UCard>
-
-      <UCard v-if="runs.length" class="border border-default">
+      <UCard class="border border-default">
         <div class="space-y-4">
-          <div>
-            <h2 class="text-base font-semibold text-highlighted">
-              Recent runs
-            </h2>
-            <p class="mt-1 text-sm text-muted">
-              Trigger a manual run here and inspect the durable runtime records as nodes execute.
-            </p>
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <h2 class="text-base font-semibold text-highlighted">
+                Recent runs
+              </h2>
+              <p class="mt-1 text-sm text-muted">
+                Jump into the run inspector to follow node-by-node execution.
+              </p>
+            </div>
+            <UButton color="neutral" variant="ghost" to="/runs">
+              View all runs
+            </UButton>
           </div>
 
-          <div class="space-y-3">
+          <PageEmptyState
+            v-if="!runs.length"
+            title="No runs yet"
+            description="Use Run now to execute the latest plan."
+            icon="i-lucide-play-circle"
+          />
+
+          <div v-else class="space-y-3">
             <NuxtLink
-              v-for="run in runs"
+              v-for="run in runs.slice(0, 8)"
               :key="run.id"
               :to="`/runs/${run.id}`"
               class="block rounded-xl border border-default p-4 transition hover:border-primary/50 hover:bg-elevated/60"
@@ -380,7 +402,7 @@ async function startRun() {
                     {{ run.id }}
                   </p>
                   <p class="text-sm text-muted">
-                    Started {{ formatDateTime(run.started_at) }}
+                    {{ formatRelativeTime(run.started_at || run.completed_at) }} · {{ formatDuration(run.started_at, run.completed_at) }}
                   </p>
                 </div>
                 <UBadge :color="runStatusColorMap[run.status]" variant="soft">

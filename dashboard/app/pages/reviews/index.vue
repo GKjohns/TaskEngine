@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import type { ReviewRecord } from '../../../shared/types/task-engine'
-import { formatDateTime } from '../../utils/taskEngine'
+import type { ArtifactRecord, ReviewRecord } from '../../../shared/types/task-engine'
 
 interface ReviewListItem extends ReviewRecord {
   runs?: {
@@ -14,19 +13,21 @@ interface ReviewListItem extends ReviewRecord {
   } | null
 }
 
-const statusColorMap = {
-  pending: 'warning',
-  approved: 'success',
-  rejected: 'error',
-  edited: 'info'
-} as const
-
 const pendingReviewId = ref<string | null>(null)
 const actionError = ref('')
+const { refreshPendingReviewCount } = useDashboard()
 
 const { data, status, error, refresh } = await useFetch<ReviewListItem[]>('/api/reviews', {
   default: () => []
 })
+
+const { data: artifacts } = await useFetch<ArtifactRecord[]>('/api/artifacts', {
+  default: () => []
+})
+
+function outputArtifactForReview(review: ReviewListItem) {
+  return (artifacts.value || []).find(artifact => artifact.created_by_node_id === review.node_run_id) || null
+}
 
 async function resolveReview(reviewId: string, nextStatus: 'approved' | 'rejected' | 'edited') {
   pendingReviewId.value = reviewId
@@ -39,7 +40,7 @@ async function resolveReview(reviewId: string, nextStatus: 'approved' | 'rejecte
         status: nextStatus
       }
     })
-    await refresh()
+    await Promise.all([refresh(), refreshPendingReviewCount()])
   } catch (error) {
     actionError.value = error instanceof Error ? error.message : 'Failed to resolve the review.'
   } finally {
@@ -57,7 +58,7 @@ async function resolveReview(reviewId: string, nextStatus: 'approved' | 'rejecte
             Review inbox
           </h2>
           <p class="mt-1 text-sm text-muted">
-            Review nodes now pause active runs until you approve, reject, or send them back for edits.
+            Pending review nodes pause runs until you approve, reject, or request another edit pass.
           </p>
         </div>
 
@@ -79,7 +80,6 @@ async function resolveReview(reviewId: string, nextStatus: 'approved' | 'rejecte
         title="Could not load reviews"
         :description="error.message"
       />
-
       <UAlert
         v-else-if="actionError"
         color="error"
@@ -96,66 +96,14 @@ async function resolveReview(reviewId: string, nextStatus: 'approved' | 'rejecte
       />
 
       <div v-else class="space-y-3">
-        <UCard
+        <ReviewCard
           v-for="review in data"
           :key="review.id"
-          class="border border-default"
-        >
-          <div class="space-y-3">
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <p class="font-medium text-highlighted">
-                  {{ review.runs?.tasks?.title || review.id }}
-                </p>
-                <p class="mt-1 text-sm text-muted">
-                  {{ review.node_runs?.node_key ? `${review.node_runs.node_key} · ${review.node_runs.node_type}` : 'Node details unavailable' }}
-                </p>
-              </div>
-
-              <UBadge :color="statusColorMap[review.status]" variant="soft">
-                {{ review.status }}
-              </UBadge>
-            </div>
-
-            <div class="text-sm text-muted">
-              <p>
-                Created {{ formatDateTime(review.created_at) }}
-              </p>
-              <p>
-                Resolved {{ formatDateTime(review.resolved_at) }}
-              </p>
-              <p v-if="review.comments">
-                Comments: {{ review.comments }}
-              </p>
-            </div>
-
-            <div v-if="review.status === 'pending'" class="flex flex-wrap gap-2">
-              <UButton
-                color="success"
-                :loading="pendingReviewId === review.id"
-                @click="resolveReview(review.id, 'approved')"
-              >
-                Approve
-              </UButton>
-              <UButton
-                color="info"
-                variant="soft"
-                :loading="pendingReviewId === review.id"
-                @click="resolveReview(review.id, 'edited')"
-              >
-                Request edits
-              </UButton>
-              <UButton
-                color="error"
-                variant="soft"
-                :loading="pendingReviewId === review.id"
-                @click="resolveReview(review.id, 'rejected')"
-              >
-                Reject
-              </UButton>
-            </div>
-          </div>
-        </UCard>
+          :review="review"
+          :output-artifact="outputArtifactForReview(review)"
+          :pending="pendingReviewId === review.id"
+          @resolve="resolveReview($event.id, $event.status)"
+        />
       </div>
     </div>
   </DashboardPage>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { JobRecord } from '../../../shared/types/task-engine'
-import { formatDateTime } from '../../utils/taskEngine'
+import { formatDateTime, formatRelativeTime, jobStatusColorMap } from '../../utils/taskEngine'
 
 interface JobListItem extends JobRecord {
   tasks?: {
@@ -15,16 +15,20 @@ interface JobListItem extends JobRecord {
   } | null
 }
 
-const statusColorMap = {
-  idle: 'neutral',
-  scheduled: 'primary',
-  running: 'primary',
-  waiting_review: 'warning',
-  paused: 'warning',
-  completed: 'success',
-  failed: 'error'
-} as const
+const filters = [
+  { value: 'all', label: 'All' },
+  { value: 'idle', label: 'Idle' },
+  { value: 'scheduled', label: 'Scheduled' },
+  { value: 'running', label: 'Running' },
+  { value: 'waiting_review', label: 'Waiting review' },
+  { value: 'paused', label: 'Paused' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'failed', label: 'Failed' }
+] as const
 
+type JobFilterValue = (typeof filters)[number]['value']
+
+const activeFilter = ref<JobFilterValue>('all')
 const pendingJobId = ref<string | null>(null)
 const actionError = ref('')
 
@@ -32,8 +36,20 @@ const { data, status, error, refresh } = await useFetch<JobListItem[]>('/api/job
   default: () => []
 })
 
+const visibleJobs = computed(() => (data.value || []).filter(job =>
+  activeFilter.value === 'all' ? true : job.status === activeFilter.value
+))
+
 function getResumeStatus(job: JobListItem) {
   return job.job_type === 'one_off' ? 'idle' : 'scheduled'
+}
+
+interface JobAction {
+  key: 'run' | 'resume'
+  label: string
+  color?: 'primary' | 'neutral' | 'warning'
+  variant?: 'solid' | 'soft'
+  icon?: string
 }
 
 async function updateJob(job: JobListItem, nextStatus: 'idle' | 'scheduled' | 'paused') {
@@ -54,6 +70,59 @@ async function updateJob(job: JobListItem, nextStatus: 'idle' | 'scheduled' | 'p
     pendingJobId.value = null
   }
 }
+
+async function runJob(job: JobListItem) {
+  pendingJobId.value = job.id
+  actionError.value = ''
+
+  try {
+    await $fetch('/api/runs', {
+      method: 'POST',
+      body: { task_id: job.task_id }
+    })
+    await refresh()
+  } catch (error) {
+    actionError.value = error instanceof Error ? error.message : 'Failed to start the job run.'
+  } finally {
+    pendingJobId.value = null
+  }
+}
+
+function getJobActions(job: JobListItem): JobAction[] {
+  if (job.status === 'running' || job.status === 'waiting_review') {
+    return []
+  }
+
+  if (job.job_type === 'one_off') {
+    if (job.status === 'paused') {
+      return [{ key: 'resume', label: 'Resume', color: 'primary' }]
+    }
+
+    return [{ key: 'run', label: job.status === 'failed' ? 'Retry' : 'Run now', icon: 'i-lucide-play' }]
+  }
+
+  if (job.status === 'paused') {
+    return [{ key: 'resume', label: 'Resume schedule', color: 'primary' }]
+  }
+
+  if (job.status === 'failed') {
+    return [
+      { key: 'run', label: 'Retry now', icon: 'i-lucide-play' },
+      { key: 'resume', label: 'Resume schedule', color: 'primary' }
+    ]
+  }
+
+  return [{ key: 'run', label: 'Run now', icon: 'i-lucide-play' }]
+}
+
+async function handleJobAction(job: JobListItem, action: JobAction['key']) {
+  if (action === 'run') {
+    await runJob(job)
+    return
+  }
+
+  await updateJob(job, getResumeStatus(job))
+}
 </script>
 
 <template>
@@ -65,7 +134,7 @@ async function updateJob(job: JobListItem, nextStatus: 'idle' | 'scheduled' | 'p
             Job manager
           </h2>
           <p class="mt-1 text-sm text-muted">
-            Manual, scheduled, and heartbeat jobs now expose their runtime state and can be paused or resumed from the dashboard.
+            Track scheduled, waiting, failed, and paused jobs, then trigger or recover them from one view.
           </p>
         </div>
 
@@ -80,6 +149,19 @@ async function updateJob(job: JobListItem, nextStatus: 'idle' | 'scheduled' | 'p
         </UButton>
       </div>
 
+      <div class="flex flex-wrap gap-2">
+        <UButton
+          v-for="filter in filters"
+          :key="filter.value"
+          color="neutral"
+          size="sm"
+          :variant="activeFilter === filter.value ? 'solid' : 'soft'"
+          @click="activeFilter = filter.value"
+        >
+          {{ filter.label }}
+        </UButton>
+      </div>
+
       <UAlert
         v-if="error"
         color="error"
@@ -87,7 +169,6 @@ async function updateJob(job: JobListItem, nextStatus: 'idle' | 'scheduled' | 'p
         title="Could not load jobs"
         :description="error.message"
       />
-
       <UAlert
         v-else-if="actionError"
         color="error"
@@ -97,15 +178,15 @@ async function updateJob(job: JobListItem, nextStatus: 'idle' | 'scheduled' | 'p
       />
 
       <PageEmptyState
-        v-else-if="!data.length && status !== 'pending'"
-        title="No jobs configured yet"
-        description="Create a task to generate its durable job record."
+        v-else-if="!visibleJobs.length && status !== 'pending'"
+        title="No jobs in this view"
+        description="Create a task or change the status filter to see more jobs."
         icon="i-lucide-clock"
       />
 
       <div v-else class="space-y-3">
         <UCard
-          v-for="job in data"
+          v-for="job in visibleJobs"
           :key="job.id"
           class="border border-default"
         >
@@ -116,7 +197,7 @@ async function updateJob(job: JobListItem, nextStatus: 'idle' | 'scheduled' | 'p
                   <p class="font-semibold text-highlighted">
                     {{ job.tasks?.title || job.id }}
                   </p>
-                  <UBadge :color="statusColorMap[job.status]" variant="soft">
+                  <UBadge :color="jobStatusColorMap[job.status]" variant="soft">
                     {{ job.status }}
                   </UBadge>
                   <UBadge color="neutral" variant="outline">
@@ -129,7 +210,7 @@ async function updateJob(job: JobListItem, nextStatus: 'idle' | 'scheduled' | 'p
 
                 <div class="space-y-1 text-sm text-muted">
                   <p>Next run: {{ formatDateTime(job.next_run_at) }}</p>
-                  <p>Last run: {{ formatDateTime(job.last_run_at) }}</p>
+                  <p>Last run: {{ formatRelativeTime(job.last_run_at) }}</p>
                   <p v-if="job.last_error">
                     Last error: {{ job.last_error }}
                   </p>
@@ -144,21 +225,16 @@ async function updateJob(job: JobListItem, nextStatus: 'idle' | 'scheduled' | 'p
 
               <div class="flex flex-wrap gap-2">
                 <UButton
-                  v-if="job.status !== 'paused' && job.status !== 'running' && job.status !== 'waiting_review'"
-                  color="warning"
-                  variant="soft"
+                  v-for="action in getJobActions(job)"
+                  :key="`${job.id}-${action.key}`"
+                  :color="action.color || 'primary'"
+                  :variant="action.variant || 'solid'"
+                  size="sm"
+                  :icon="action.icon"
                   :loading="pendingJobId === job.id"
-                  @click="updateJob(job, 'paused')"
+                  @click="handleJobAction(job, action.key)"
                 >
-                  Pause
-                </UButton>
-                <UButton
-                  v-if="job.status === 'paused' || job.status === 'failed'"
-                  color="primary"
-                  :loading="pendingJobId === job.id"
-                  @click="updateJob(job, getResumeStatus(job))"
-                >
-                  Resume
+                  {{ action.label }}
                 </UButton>
               </div>
             </div>

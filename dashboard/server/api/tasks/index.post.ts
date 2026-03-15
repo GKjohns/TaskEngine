@@ -1,22 +1,28 @@
 import { z } from 'zod'
 import type { Database } from '../../../shared/types/database'
+import type { Plan } from '../../../shared/types/task-engine'
 import { validatePlan } from '../../utils/graphUtils'
 import { readValidatedBody } from '../../utils/http'
 import { useOpenAI } from '../../utils/openai'
 import { generatePlan } from '../../utils/planGenerator'
 import { createServiceClient } from '../../utils/supabase'
 
+const planPreviewSchema = z.object({
+  nodes: z.array(z.record(z.string(), z.unknown()))
+})
+
 const createTaskSchema = z.object({
   title: z.string().trim().min(1).max(200),
   prompt: z.string().trim().min(1),
   trigger_type: z.enum(['manual', 'scheduled', 'heartbeat']).default('manual'),
-  schedule_config: z.record(z.string(), z.unknown()).default({})
+  schedule_config: z.record(z.string(), z.unknown()).default({}),
+  plan_json: planPreviewSchema.optional()
 })
 
 export default defineEventHandler(async (event) => {
   const body = await readValidatedBody(event, createTaskSchema)
   const client = createServiceClient()
-  const openai = useOpenAI()
+  const openai = body.plan_json ? null : useOpenAI()
 
   const { data: taskData, error: taskError } = await client
     .from('tasks')
@@ -38,7 +44,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const planJson = await generatePlan(openai, body.prompt)
+  const planJson = (body.plan_json as Plan | undefined) || await generatePlan(openai!, body.prompt)
   const validationErrors = validatePlan(planJson)
 
   const { data: plan, error: planError } = await client

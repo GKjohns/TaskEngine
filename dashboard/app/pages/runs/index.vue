@@ -1,24 +1,22 @@
 <script setup lang="ts">
 import type { RunRecord } from '../../../shared/types/task-engine'
-import { formatDateTime } from '../../utils/taskEngine'
+import { formatDuration, formatRelativeTime, runStatusColorMap } from '../../utils/taskEngine'
 
 interface RunListItem extends RunRecord {
   tasks?: { title: string } | null
   plans?: { version: number } | null
 }
 
-const statusColorMap = {
-  pending: 'neutral',
-  running: 'primary',
-  waiting_review: 'warning',
-  completed: 'success',
-  failed: 'error',
-  cancelled: 'neutral'
-} as const
+const filters = ['all', 'running', 'waiting_review', 'completed', 'failed', 'cancelled'] as const
+const activeFilter = ref<(typeof filters)[number]>('all')
 
 const { data, status, error, refresh } = await useFetch<RunListItem[]>('/api/runs', {
   default: () => []
 })
+
+const visibleRuns = computed(() => (data.value || []).filter(run =>
+  activeFilter.value === 'all' ? true : run.status === activeFilter.value
+))
 </script>
 
 <template>
@@ -30,7 +28,7 @@ const { data, status, error, refresh } = await useFetch<RunListItem[]>('/api/run
             Run history
           </h2>
           <p class="mt-1 text-sm text-muted">
-            Sprint 1 exposes the run records and related task metadata even before the runtime is fully built.
+            Filter completed and in-flight executions, then jump into the run inspector for the detailed graph.
           </p>
         </div>
 
@@ -45,6 +43,19 @@ const { data, status, error, refresh } = await useFetch<RunListItem[]>('/api/run
         </UButton>
       </div>
 
+      <div class="flex flex-wrap gap-2">
+        <UButton
+          v-for="filter in filters"
+          :key="filter"
+          color="neutral"
+          size="sm"
+          :variant="activeFilter === filter ? 'solid' : 'soft'"
+          @click="activeFilter = filter"
+        >
+          {{ filter }}
+        </UButton>
+      </div>
+
       <UAlert
         v-if="error"
         color="error"
@@ -54,15 +65,15 @@ const { data, status, error, refresh } = await useFetch<RunListItem[]>('/api/run
       />
 
       <PageEmptyState
-        v-else-if="!data?.length && status !== 'pending'"
-        title="No runs yet"
-        description="Runs will appear here once task execution starts in the next sprint."
+        v-else-if="!visibleRuns.length && status !== 'pending'"
+        title="No runs in this view"
+        description="Change the status filter or trigger a task to create a new run."
         icon="i-lucide-play-circle"
       />
 
       <div v-else class="space-y-3">
         <NuxtLink
-          v-for="run in data"
+          v-for="run in visibleRuns"
           :key="run.id"
           :to="`/runs/${run.id}`"
           class="block rounded-xl border border-default bg-default p-4 transition hover:border-primary/50 hover:bg-elevated/60"
@@ -73,14 +84,14 @@ const { data, status, error, refresh } = await useFetch<RunListItem[]>('/api/run
                 {{ run.tasks?.title || run.id }}
               </p>
               <p class="text-sm text-muted">
-                Status recorded {{ formatDateTime(run.started_at || run.completed_at) }}
+                {{ formatRelativeTime(run.started_at || run.completed_at) }}
               </p>
               <p class="text-sm text-muted">
-                {{ run.plans?.version ? `Plan v${run.plans.version}` : 'No plan version attached' }}
+                {{ run.plans?.version ? `Plan v${run.plans.version}` : 'No plan version attached' }} · {{ formatDuration(run.started_at, run.completed_at) }}
               </p>
             </div>
 
-            <UBadge :color="statusColorMap[run.status]" variant="soft">
+            <UBadge :color="runStatusColorMap[run.status]" variant="soft">
               {{ run.status }}
             </UBadge>
           </div>

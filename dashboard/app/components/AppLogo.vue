@@ -6,7 +6,7 @@ defineProps<{
 </script>
 
 <template>
-  <div class="flex items-center gap-2.5">
+  <div class="flex items-center gap-1.5">
     <svg
       :width="size ?? 24"
       :height="size ?? 24"
@@ -44,7 +44,7 @@ defineProps<{
 
     <span
       v-if="showWordmark !== false"
-      class="text-sm font-bold tracking-tight"
+      class="text-base font-bold tracking-tight"
       style="color: var(--ui-primary)"
     >
       Task Engine

@@ -1,17 +1,22 @@
 <script setup lang="ts">
-import type { ArtifactRecord } from '../../../shared/types/task-engine'
-import { formatDateTime } from '../../utils/taskEngine'
+import type { ArtifactRecord, TaskRecord } from '../../../shared/types/task-engine'
 
-const typeColorMap = {
-  markdown: 'primary',
-  text: 'neutral',
-  json: 'info',
-  csv: 'success'
-} as const
+const typeFilter = ref<'all' | ArtifactRecord['type']>('all')
+const taskFilter = ref<'all' | string>('all')
 
 const { data, status, error, refresh } = await useFetch<ArtifactRecord[]>('/api/artifacts', {
   default: () => []
 })
+
+const { data: tasks } = await useFetch<TaskRecord[]>('/api/tasks', {
+  default: () => []
+})
+
+const visibleArtifacts = computed(() => (data.value || []).filter((artifact) => {
+  const matchesType = typeFilter.value === 'all' || artifact.type === typeFilter.value
+  const matchesTask = taskFilter.value === 'all' || artifact.task_id === taskFilter.value
+  return matchesType && matchesTask
+}))
 </script>
 
 <template>
@@ -23,7 +28,7 @@ const { data, status, error, refresh } = await useFetch<ArtifactRecord[]>('/api/
             Artifact browser
           </h2>
           <p class="mt-1 text-sm text-muted">
-            Sprint 1 includes the storage-backed artifact APIs, so the dashboard can already surface saved outputs.
+            Browse generated outputs by type or task, then open a full artifact view for richer rendering.
           </p>
         </div>
 
@@ -38,6 +43,33 @@ const { data, status, error, refresh } = await useFetch<ArtifactRecord[]>('/api/
         </UButton>
       </div>
 
+      <div class="grid gap-3 lg:grid-cols-2">
+        <UFormField label="Type">
+          <USelect
+            v-model="typeFilter"
+            :items="[
+              { label: 'All types', value: 'all' },
+              { label: 'Markdown', value: 'markdown' },
+              { label: 'Text', value: 'text' },
+              { label: 'JSON', value: 'json' },
+              { label: 'CSV', value: 'csv' }
+            ]"
+            class="w-full"
+          />
+        </UFormField>
+
+        <UFormField label="Task">
+          <USelect
+            v-model="taskFilter"
+            :items="[
+              { label: 'All tasks', value: 'all' },
+              ...((tasks || []).map(task => ({ label: task.title, value: task.id })))
+            ]"
+            class="w-full"
+          />
+        </UFormField>
+      </div>
+
       <UAlert
         v-if="error"
         color="error"
@@ -47,46 +79,18 @@ const { data, status, error, refresh } = await useFetch<ArtifactRecord[]>('/api/
       />
 
       <PageEmptyState
-        v-else-if="!data?.length && status !== 'pending'"
-        title="No artifacts yet"
-        description="Generated documents and structured outputs will appear here once runs begin writing outputs."
+        v-else-if="!visibleArtifacts.length && status !== 'pending'"
+        title="No artifacts in this view"
+        description="Change the filters or run a task that emits artifacts."
         icon="i-lucide-file-text"
       />
 
       <div v-else class="grid gap-4 xl:grid-cols-2">
-        <UCard
-          v-for="artifact in data"
+        <ArtifactPreview
+          v-for="artifact in visibleArtifacts"
           :key="artifact.id"
-          class="border border-default"
-        >
-          <div class="space-y-3">
-            <div class="flex items-start justify-between gap-3">
-              <div>
-                <p class="font-medium text-highlighted">
-                  {{ artifact.title }}
-                </p>
-                <p class="mt-1 text-sm text-muted">
-                  {{ formatDateTime(artifact.created_at) }}
-                </p>
-              </div>
-
-              <UBadge :color="typeColorMap[artifact.type]" variant="soft">
-                {{ artifact.type }}
-              </UBadge>
-            </div>
-
-            <p class="text-sm text-muted">
-              {{ artifact.content ? artifact.content.slice(0, 180) : 'Stored in Supabase Storage' }}
-            </p>
-
-            <div class="flex items-center justify-between gap-3 text-sm text-muted">
-              <span>{{ artifact.task_id ? `Task ${artifact.task_id}` : 'Unassigned artifact' }}</span>
-              <UButton color="neutral" variant="ghost" :to="`/artifacts/${artifact.id}`">
-                Open
-              </UButton>
-            </div>
-          </div>
-        </UCard>
+          :artifact="artifact"
+        />
       </div>
     </div>
   </DashboardPage>

@@ -1,22 +1,31 @@
 <script setup lang="ts">
 import type { ArtifactRecord } from '../../../shared/types/task-engine'
-import { formatDateTime } from '../../utils/taskEngine'
+import { artifactTypeColorMap, formatDateTime, formatJson, parseCsvRows } from '../../utils/taskEngine'
 
 const route = useRoute()
 const artifactId = computed(() => route.params.id as string)
-
-const typeColorMap = {
-  markdown: 'primary',
-  text: 'neutral',
-  json: 'info',
-  csv: 'success'
-} as const
 
 const { data, error, refresh, status } = await useFetch<ArtifactRecord>(`/api/artifacts/${artifactId.value}`, {
   key: `artifact-${artifactId.value}`
 })
 
-const artifactContentFormat = computed(() => data.value?.type === 'markdown' ? 'markdown' : data.value?.type || 'text')
+const effectiveType = computed<ArtifactRecord['type']>(() => {
+  if (data.value?.type !== 'text' || !data.value.content) {
+    return data.value?.type || 'text'
+  }
+
+  try {
+    JSON.parse(data.value.content)
+    return 'json'
+  } catch {
+    return 'text'
+  }
+})
+
+const artifactContentFormat = computed(() => effectiveType.value === 'markdown' ? 'markdown' : effectiveType.value || 'text')
+const formattedJson = computed(() => formatJson(data.value?.content || ''))
+const csvRows = computed(() => parseCsvRows(data.value?.content || ''))
+const csvHeaders = computed(() => csvRows.value[0] ? Object.keys(csvRows.value[0]).filter(key => key !== '_row') : [])
 </script>
 
 <template>
@@ -24,8 +33,11 @@ const artifactContentFormat = computed(() => data.value?.type === 'markdown' ? '
     <div class="space-y-6">
       <div class="flex items-center justify-between gap-3">
         <div class="flex flex-wrap items-center gap-2">
-          <UBadge v-if="data" :color="typeColorMap[data.type]" variant="soft">
-            {{ data.type }}
+          <UBadge v-if="data" :color="artifactTypeColorMap[effectiveType]" variant="soft">
+            {{ effectiveType }}
+          </UBadge>
+          <UBadge v-if="data && effectiveType !== data.type" color="neutral" variant="outline">
+            stored as {{ data.type }}
           </UBadge>
           <UBadge v-if="data?.task_id" color="neutral" variant="outline">
             {{ `Task ${data.task_id}` }}
@@ -81,11 +93,47 @@ const artifactContentFormat = computed(() => data.value?.type === 'markdown' ? '
             </h2>
 
             <ReadOnlyMarkdown
-              v-if="data.content"
+              v-if="data.content && effectiveType === 'markdown'"
               :content="data.content"
               :format="artifactContentFormat"
-              :mono="data.type !== 'markdown'"
             />
+
+            <pre
+              v-else-if="data.content && effectiveType === 'json'"
+              class="overflow-auto rounded-xl border border-default bg-elevated/40 p-4 text-sm"
+            >{{ formattedJson }}</pre>
+
+            <div v-else-if="data.content && effectiveType === 'csv'" class="overflow-x-auto rounded-xl border border-default">
+              <table class="min-w-full divide-y divide-default text-sm">
+                <thead class="bg-elevated/60">
+                  <tr>
+                    <th
+                      v-for="header in csvHeaders"
+                      :key="header"
+                      class="whitespace-nowrap px-4 py-3 text-left font-medium text-highlighted"
+                    >
+                      {{ header }}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-default">
+                  <tr v-for="row in csvRows" :key="row._row">
+                    <td
+                      v-for="header in csvHeaders"
+                      :key="`${row._row}-${header}`"
+                      class="whitespace-nowrap px-4 py-3 text-muted"
+                    >
+                      {{ row[header] }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <pre
+              v-else-if="data.content"
+              class="overflow-auto rounded-xl border border-default bg-elevated/40 p-4 text-sm whitespace-pre-wrap"
+            >{{ data.content }}</pre>
 
             <p v-else class="text-sm text-muted">
               This artifact was stored in Supabase Storage. Use the download action to open the signed URL.
