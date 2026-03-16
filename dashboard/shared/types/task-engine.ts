@@ -6,6 +6,7 @@ export const PLAN_NODE_TYPES = [
   'llm_summarize',
   'llm_transform',
   'retrieve',
+  'http_fetch',
   'branch',
   'wait',
   'review',
@@ -23,6 +24,20 @@ export type RunStatus = 'pending' | 'running' | 'waiting_review' | 'completed' |
 export type NodeRunStatus = 'pending' | 'running' | 'waiting_review' | 'completed' | 'failed' | 'skipped'
 export type ReviewStatus = 'pending' | 'approved' | 'rejected' | 'edited'
 export type ArtifactType = 'markdown' | 'text' | 'json' | 'csv'
+export type RetrieveTimeWindow = '24h' | '7d' | '30d' | 'since_last_run'
+export type RetrieveSort = 'newest' | 'oldest'
+export type HttpFetchMethod = 'GET' | 'POST'
+export type HttpFetchResponseType = 'json' | 'text' | 'html_to_text' | 'csv'
+
+export interface RetrieveConfig {
+  match: string | null
+  task_id: string | null
+  time_window: RetrieveTimeWindow | null
+  content_search: string | null
+  types: ArtifactType[] | null
+  limit: number
+  sort: RetrieveSort
+}
 
 export interface PlanNode {
   id: string
@@ -35,6 +50,13 @@ export interface PlanNode {
   max_length: number | null
   source: string | null
   filter: string | null
+  retrieve_config: RetrieveConfig | null
+  url: string | null
+  method: HttpFetchMethod | null
+  headers: Record<string, string> | null
+  body: string | null
+  response_type: HttpFetchResponseType | null
+  artifact_title: string | null
   condition: string | null
   if_true_node: string | null
   if_false_node: string | null
@@ -58,6 +80,7 @@ export interface TaskRecord {
   schedule_config: Record<string, unknown>
   status: TaskStatus
   input_artifact_ids: string[]
+  last_completed_run_at: string | null
   created_at: string
   updated_at?: string
 }

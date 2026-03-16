@@ -10,6 +10,7 @@ const createPlanSchema = z.object({
   title: z.string().trim().min(1).max(200),
   prompt: z.string().trim().min(1),
   description: z.string().trim().max(500).optional(),
+  trigger_type: z.enum(['manual', 'scheduled', 'heartbeat']).optional(),
   plan_json: z.object({
     nodes: z.array(z.record(z.string(), z.unknown()))
   }).optional()
@@ -19,7 +20,9 @@ export default defineEventHandler(async (event) => {
   const body = await readValidatedBody(event, createPlanSchema)
   const client = createServiceClient()
 
-  const planJson = (body.plan_json as Plan | undefined) || await generatePlan(useOpenAI(), body.prompt)
+  const planJson = (body.plan_json as Plan | undefined) || await generatePlan(useOpenAI(), body.prompt, {
+    triggerType: body.trigger_type
+  })
   const validationErrors = validatePlan(planJson)
 
   const nodeCount = planJson.nodes?.length ?? 0

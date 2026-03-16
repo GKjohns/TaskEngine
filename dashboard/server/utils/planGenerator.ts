@@ -1,6 +1,6 @@
 import type OpenAI from 'openai'
 import type { Response, ResponseFormatTextJSONSchemaConfig } from 'openai/resources/responses/responses'
-import type { Plan, PlanNode, PlanNodeType } from '../../shared/types/task-engine'
+import type { Plan, PlanNode, PlanNodeType, TaskTriggerType } from '../../shared/types/task-engine'
 
 interface StructureNode {
   id: string
@@ -33,6 +33,7 @@ const STRUCTURE_SCHEMA: ResponseFormatTextJSONSchemaConfig = {
                 'llm_summarize',
                 'llm_transform',
                 'retrieve',
+                'http_fetch',
                 'branch',
                 'wait',
                 'review',
@@ -66,9 +67,9 @@ A plan is a reusable workflow template. Given a description of the desired workf
 - per_artifact: whether this node should process each input artifact individually (true) or all at once (false). Set to true when each artifact needs independent processing. Set to false when the node needs to see all inputs together.
 - depends_on: array of node ids that must complete before this node runs
 
-The user selects input artifacts when creating a task. These are automatically fed to root nodes (nodes with empty depends_on). Do NOT create retrieve nodes just to load the user's input data — that is handled automatically. Start the plan with the first processing step.
+The task trigger type may be included in the workflow context. Use it to decide whether the workflow should fetch fresh data each run.
 
-Only use retrieve nodes when the plan genuinely needs to dynamically search for or fetch additional context beyond the user's explicit inputs (e.g., "find related documents", "search for recent entries matching a criteria").
+The user selects input artifacts when creating a task. These are automatically fed to root nodes (nodes with empty depends_on). Do NOT create retrieve nodes just to load the user's manually selected input artifacts.
 
 Available node types:
 
@@ -83,7 +84,12 @@ SIMPLE LLM NODES:
 - llm_transform: rewriting, formatting, translation
 
 INFRASTRUCTURE NODES:
-- retrieve: dynamically search for or fetch additional context (NOT for loading the user's input artifacts)
+- retrieve: dynamically search for artifacts. Use when the task needs fresh data each time it runs. Use retrieve when:
+  - The task is recurring and needs whatever is new since the last run
+  - The task needs the latest output from another task
+  - The prompt says latest, recent, new, since last, current, or today's
+  For one-off manual tasks where the user will select the inputs, start with a processing node directly. For recurring tasks, start with a retrieve node when dynamic artifact loading is needed.
+- http_fetch: pull data from an external URL. Use when the task references a website, API endpoint, or external data source. This node produces a single artifact from the response.
 - branch: conditional routing based on previous output
 - wait: pause for a duration
 - review: pause for human review
@@ -185,10 +191,61 @@ const NODE_CONFIG_SCHEMAS: Record<PlanNodeType, ResponseFormatTextJSONSchemaConf
     schema: {
       type: 'object',
       properties: {
-        source: { type: 'string' },
-        filter: { type: ['string', 'null'] }
+        retrieve_config: {
+          type: 'object',
+          properties: {
+            match: { type: ['string', 'null'] },
+            task_id: { type: ['string', 'null'] },
+            time_window: {
+              type: ['string', 'null'],
+              enum: ['24h', '7d', '30d', 'since_last_run', null]
+            },
+            content_search: { type: ['string', 'null'] },
+            types: {
+              type: ['array', 'null'],
+              items: {
+                type: 'string',
+                enum: ['markdown', 'text', 'json', 'csv']
+              }
+            },
+            limit: { type: 'number' },
+            sort: {
+              type: 'string',
+              enum: ['newest', 'oldest']
+            }
+          },
+          required: ['match', 'task_id', 'time_window', 'content_search', 'types', 'limit', 'sort'],
+          additionalProperties: false
+        }
       },
-      required: ['source', 'filter'],
+      required: ['retrieve_config'],
+      additionalProperties: false
+    }
+  },
+  http_fetch: {
+    type: 'json_schema',
+    name: 'http_fetch_config',
+    strict: true,
+    schema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string' },
+        method: {
+          type: 'string',
+          enum: ['GET', 'POST']
+        },
+        headers: {
+          type: ['object', 'null'],
+          additionalProperties: { type: 'string' }
+        },
+        body: { type: ['string', 'null'] },
+        response_type: {
+          type: 'string',
+          enum: ['json', 'text', 'html_to_text', 'csv']
+        },
+        artifact_title: { type: ['string', 'null'] }
+      },
+      required: ['url', 'method', 'response_type', 'artifact_title'],
       additionalProperties: false
     }
   },
@@ -271,7 +328,10 @@ const NODE_CONFIG_SCHEMAS: Record<PlanNodeType, ResponseFormatTextJSONSchemaConf
 
 const NODE_CONFIG_INSTRUCTIONS = `You are filling in the configuration for a single node in a Task Engine execution plan.
 
-Given the node's type, description, and the overall workflow context, generate the fields for this node. Be specific in prompts. Write the actual instructions the downstream model or runtime should use. Keep prompts generic enough that the plan can be reused with different input data.`
+Given the node's type, description, and the overall workflow context, generate the fields for this node. Be specific in prompts. Write the actual instructions the downstream model or runtime should use. Keep prompts generic enough that the plan can be reused with different input data.
+
+For retrieve nodes, output a structured retrieve_config object instead of legacy source/filter fields.
+For http_fetch nodes, configure the real URL, method, response_type, and optional headers/body when needed.`
 
 function getResponseText(response: Response) {
   if (response.output_text) {
@@ -281,11 +341,26 @@ function getResponseText(response: Response) {
   throw new Error('OpenAI response did not include structured output text')
 }
 
-export async function generatePlan(openai: OpenAI, prompt: string): Promise<Plan> {
+interface GeneratePlanOptions {
+  triggerType?: TaskTriggerType
+}
+
+function buildWorkflowContext(prompt: string, options?: GeneratePlanOptions) {
+  const lines = [`Workflow prompt: ${prompt}`]
+
+  if (options?.triggerType) {
+    lines.push(`Task trigger type: ${options.triggerType}`)
+  }
+
+  return lines.join('\n')
+}
+
+export async function generatePlan(openai: OpenAI, prompt: string, options?: GeneratePlanOptions): Promise<Plan> {
+  const workflowContext = buildWorkflowContext(prompt, options)
   const structureResponse = await openai.responses.create({
     model: 'gpt-5.4',
     instructions: STRUCTURE_INSTRUCTIONS,
-    input: prompt,
+    input: workflowContext,
     reasoning: { effort: 'high' },
     text: { format: STRUCTURE_SCHEMA }
   })
@@ -297,7 +372,7 @@ export async function generatePlan(openai: OpenAI, prompt: string): Promise<Plan
       model: 'gpt-5-mini',
       instructions: NODE_CONFIG_INSTRUCTIONS,
       input: [
-        `Workflow: ${prompt}`,
+        workflowContext,
         `Node ID: ${node.id}`,
         `Node type: ${node.type}`,
         `Description: ${node.description}`,
@@ -320,6 +395,13 @@ export async function generatePlan(openai: OpenAI, prompt: string): Promise<Plan
     max_length: null,
     source: null,
     filter: null,
+    retrieve_config: null,
+    url: null,
+    method: null,
+    headers: null,
+    body: null,
+    response_type: null,
+    artifact_title: null,
     condition: null,
     if_true_node: null,
     if_false_node: null,

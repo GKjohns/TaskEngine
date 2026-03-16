@@ -1,5 +1,6 @@
 import { agentCode } from './agentCode'
 import { agentTransform } from './agentTransform'
+import { httpFetch } from './httpFetch'
 import { branch, emit, notify, retrieve, review, wait } from './infrastructure'
 import { llmClassify, llmExtract, llmSummarize, llmTransform } from './llm'
 import { registerNodeExecutor } from './registry'
@@ -18,6 +19,7 @@ export function ensureNodeExecutorsRegistered() {
   registerNodeExecutor('llm_extract', llmExtract)
   registerNodeExecutor('llm_transform', llmTransform)
   registerNodeExecutor('retrieve', retrieve)
+  registerNodeExecutor('http_fetch', httpFetch)
   registerNodeExecutor('emit', emit)
   registerNodeExecutor('review', review)
   registerNodeExecutor('branch', branch)

@@ -176,7 +176,10 @@ async function generatePreview() {
   try {
     const response = await $fetch<{ plan: Plan, validation_errors: string[] }>('/api/plans/preview', {
       method: 'POST',
-      body: { prompt: form.prompt }
+      body: {
+        prompt: form.prompt,
+        trigger_type: form.trigger_type
+      }
     })
 
     generatedPlan.value = response.plan
@@ -532,6 +535,14 @@ function selectPlan(plan: PlanRecord) {
                 </button>
               </div>
             </UFormField>
+
+            <UAlert
+              v-if="form.trigger_type !== 'manual'"
+              color="info"
+              variant="soft"
+              title="Scheduled tasks often need dynamic loading"
+              description="If this task should pull fresh reports, recent outputs, or external data on each run, describe that in the prompt so the planner can add a retrieve or http_fetch step."
+            />
 
             <UFormField
               v-if="form.trigger_type !== 'manual'"

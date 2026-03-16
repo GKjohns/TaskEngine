@@ -13,14 +13,15 @@ export default defineEventHandler(async (event) => {
   const client = createServiceClient()
   const artifactIds = body.artifact_ids || []
 
-  const { run, planId, jobId } = await createPendingRunForTask(client, body.task_id, null, artifactIds)
+  const { run, planId, jobId, taskInputArtifactIds } = await createPendingRunForTask(client, body.task_id, null, artifactIds)
 
   await sendRunStartEvent({
     runId: run.id,
     planId,
     taskId: body.task_id,
     jobId,
-    inputArtifactIds: run.input_artifact_ids
+    inputArtifactIds: run.input_artifact_ids,
+    taskInputArtifactIds
   })
 
   return run

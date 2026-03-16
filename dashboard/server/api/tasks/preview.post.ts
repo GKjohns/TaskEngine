@@ -15,7 +15,9 @@ export default defineEventHandler(async (event) => {
   const body = await readValidatedBody(event, previewTaskSchema)
   const openai = useOpenAI()
 
-  const plan = await generatePlan(openai, body.prompt)
+  const plan = await generatePlan(openai, body.prompt, {
+    triggerType: body.trigger_type
+  })
   const validationErrors = validatePlan(plan)
 
   return {

@@ -35,12 +35,18 @@ function selectNode(nodeId: string) {
     >
       <div class="flex w-10 flex-col items-center">
         <div
-          class="flex size-10 items-center justify-center rounded-full border border-default bg-elevated"
+          class="flex size-10 items-center justify-center rounded-full border bg-elevated"
           :class="{
+            'border-info/40 bg-info/8': node.type === 'http_fetch',
+            'border-default': node.type !== 'http_fetch',
             'ring-2 ring-primary/40': activeNodeId === node.id
           }"
         >
-          <UIcon :name="nodeTypeIcon(node.type)" class="size-4 text-toned" />
+          <UIcon
+            :name="nodeTypeIcon(node.type)"
+            class="size-4"
+            :class="node.type === 'http_fetch' ? 'text-info' : 'text-toned'"
+          />
         </div>
         <div
           v-if="index < sortedNodes.length - 1"

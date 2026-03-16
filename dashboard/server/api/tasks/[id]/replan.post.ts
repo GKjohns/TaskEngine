@@ -47,7 +47,9 @@ export default defineEventHandler(async (event) => {
   }
 
   const nextVersion = (plans?.[0]?.version || 0) + 1
-  const planJson = await generatePlan(openai, task.prompt)
+  const planJson = await generatePlan(openai, task.prompt, {
+    triggerType: task.trigger_type
+  })
   const validationErrors = validatePlan(planJson)
 
   const { data: plan, error: planError } = await client

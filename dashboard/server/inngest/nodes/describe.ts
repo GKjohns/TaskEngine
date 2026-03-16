@@ -65,9 +65,46 @@ export function describeAgentResult(outputText: string): string {
   return firstSentence(outputText)
 }
 
-export function describeRetrieve(count: number, source?: string | null): string {
-  const from = source ? ` matching "${source}"` : ''
-  return `Retrieved ${count} artifact${count !== 1 ? 's' : ''}${from}`
+export function describeRetrieve(input: {
+  count: number
+  source?: string | null
+  match?: string | null
+  taskId?: string | null
+  timeWindow?: string | null
+  fallbackSource?: 'run_input' | 'task_input_artifacts' | null
+}) {
+  const { count, source, match, taskId, timeWindow, fallbackSource } = input
+
+  if (fallbackSource === 'run_input') {
+    return `Used ${count} manually selected artifact${count !== 1 ? 's' : ''}`
+  }
+
+  if (fallbackSource === 'task_input_artifacts') {
+    return `Used ${count} saved task input artifact${count !== 1 ? 's' : ''} as fallback`
+  }
+
+  const parts: string[] = []
+
+  if (match) {
+    parts.push(`matching "${match}"`)
+  } else if (source) {
+    parts.push(`matching "${source}"`)
+  }
+
+  if (taskId) {
+    parts.push('from a specific task')
+  }
+
+  if (timeWindow) {
+    parts.push(`within ${timeWindow.replaceAll('_', ' ')}`)
+  }
+
+  const suffix = parts.length ? ` ${parts.join(' ')}` : ''
+  return `Retrieved ${count} artifact${count !== 1 ? 's' : ''}${suffix}`
+}
+
+export function describeHttpFetch(title: string, url: string, responseType: string) {
+  return `Fetched ${responseType} content from ${url} into "${title}"`
 }
 
 export function describeEmit(title: string, format: string): string {

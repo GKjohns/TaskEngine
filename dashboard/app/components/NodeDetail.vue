@@ -21,6 +21,35 @@ const logs = computed<Record<string, unknown>>(() => props.nodeRun.logs || {})
 const toolCalls = computed(() => Array.isArray(logs.value.tool_calls) ? logs.value.tool_calls as Array<Record<string, unknown>> : [])
 const perArtifactCalls = computed(() => Array.isArray(logs.value.calls) ? logs.value.calls as Array<Record<string, unknown>> : [])
 const errorMessage = computed(() => typeof logs.value.error === 'string' ? logs.value.error : '')
+const retrieveConfig = computed(() => props.node?.retrieve_config || null)
+const httpFetchConfig = computed(() => props.node?.type === 'http_fetch' ? {
+  url: props.node.url,
+  method: props.node.method,
+  headers: props.node.headers,
+  body: props.node.body,
+  response_type: props.node.response_type,
+  artifact_title: props.node.artifact_title
+} : null)
+const retrieveRuntime = computed(() => ({
+  retrievedCount: typeof logs.value.retrieved_count === 'number' ? logs.value.retrieved_count : null,
+  effectiveTimeWindow: typeof logs.value.effective_time_window === 'string' ? logs.value.effective_time_window : null,
+  fallbackUsed: typeof logs.value.fallback_used === 'string' ? logs.value.fallback_used : null
+}))
+const retrieveTypes = computed(() => {
+  if (retrieveConfig.value?.types?.length) {
+    return retrieveConfig.value.types
+  }
+
+  return Array.isArray(logs.value.types)
+    ? logs.value.types.filter((value): value is string => typeof value === 'string')
+    : []
+})
+const httpFetchRuntime = computed(() => ({
+  url: typeof logs.value.url === 'string' ? logs.value.url : null,
+  status: typeof logs.value.response_status === 'number' ? logs.value.response_status : null,
+  responseType: typeof logs.value.response_type === 'string' ? logs.value.response_type : null,
+  truncated: typeof logs.value.truncated === 'boolean' ? logs.value.truncated : null
+}))
 </script>
 
 <template>
@@ -93,6 +122,87 @@ const errorMessage = computed(() => typeof logs.value.error === 'string' ? logs.
               :artifact="artifact"
               compact
             />
+          </div>
+        </div>
+
+        <div v-if="nodeRun.node_type === 'retrieve'" class="space-y-3">
+          <h4 class="text-sm font-medium text-highlighted">
+            Retrieve details
+          </h4>
+          <div class="grid gap-3 text-sm text-muted sm:grid-cols-2">
+            <p v-if="retrieveConfig?.match || typeof logs.match === 'string'">
+              Title match: {{ retrieveConfig?.match || logs.match }}
+            </p>
+            <p v-if="retrieveConfig?.task_id || typeof logs.task_id === 'string'">
+              Task scope: {{ retrieveConfig?.task_id || logs.task_id }}
+            </p>
+            <p v-if="retrieveConfig?.time_window || retrieveRuntime.effectiveTimeWindow">
+              Time window: {{ retrieveRuntime.effectiveTimeWindow || retrieveConfig?.time_window }}
+            </p>
+            <p v-if="retrieveConfig?.content_search || typeof logs.content_search === 'string'">
+              Content search: {{ retrieveConfig?.content_search || logs.content_search }}
+            </p>
+            <p v-if="retrieveTypes.length">
+              Types: {{ retrieveTypes.join(', ') }}
+            </p>
+            <p v-if="retrieveConfig?.limit || typeof logs.limit === 'number'">
+              Limit: {{ retrieveConfig?.limit || logs.limit }}
+            </p>
+            <p v-if="retrieveConfig?.sort || typeof logs.sort === 'string'">
+              Sort: {{ retrieveConfig?.sort || logs.sort }}
+            </p>
+            <p v-if="retrieveRuntime.retrievedCount !== null">
+              Retrieved: {{ retrieveRuntime.retrievedCount }}
+            </p>
+            <p v-if="retrieveRuntime.fallbackUsed">
+              Fallback used: {{ retrieveRuntime.fallbackUsed }}
+            </p>
+            <p v-if="node?.source">
+              Legacy source: {{ node.source }}
+            </p>
+            <p v-if="node?.filter">
+              Legacy filter: {{ node.filter }}
+            </p>
+          </div>
+        </div>
+
+        <div v-if="nodeRun.node_type === 'http_fetch'" class="space-y-3">
+          <h4 class="text-sm font-medium text-highlighted">
+            HTTP fetch details
+          </h4>
+          <div class="grid gap-3 text-sm text-muted sm:grid-cols-2">
+            <p v-if="httpFetchConfig?.url || httpFetchRuntime.url">
+              URL: {{ httpFetchConfig?.url || httpFetchRuntime.url }}
+            </p>
+            <p v-if="httpFetchConfig?.method">
+              Method: {{ httpFetchConfig.method }}
+            </p>
+            <p v-if="httpFetchConfig?.response_type || httpFetchRuntime.responseType">
+              Response type: {{ httpFetchConfig?.response_type || httpFetchRuntime.responseType }}
+            </p>
+            <p v-if="httpFetchConfig?.artifact_title">
+              Artifact title: {{ httpFetchConfig.artifact_title }}
+            </p>
+            <p v-if="httpFetchRuntime.status !== null">
+              Response status: {{ httpFetchRuntime.status }}
+            </p>
+            <p v-if="httpFetchRuntime.truncated !== null">
+              Truncated: {{ httpFetchRuntime.truncated ? 'Yes' : 'No' }}
+            </p>
+          </div>
+
+          <div v-if="httpFetchConfig?.headers" class="space-y-1.5">
+            <p class="text-xs font-medium text-muted uppercase tracking-wide">
+              Headers
+            </p>
+            <JsonViewer :data="httpFetchConfig.headers" compact />
+          </div>
+
+          <div v-if="httpFetchConfig?.body" class="space-y-1.5">
+            <p class="text-xs font-medium text-muted uppercase tracking-wide">
+              Request body
+            </p>
+            <ContentRenderer :content="httpFetchConfig.body" compact />
           </div>
         </div>
 

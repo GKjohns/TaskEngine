@@ -73,6 +73,11 @@ const runs = computed(() => [...(task.value?.runs || [])].sort((a, b) => {
 }))
 const jobs = computed(() => task.value?.jobs || [])
 const selectedNode = computed(() => activePlan.value?.plan_json.nodes.find(node => node.id === selectedNodeId.value) || activePlan.value?.plan_json.nodes[0] || null)
+const rootRetrieveNode = computed(() => activePlan.value?.plan_json.nodes.find(node =>
+  node.type === 'retrieve'
+  && node.depends_on.length === 0
+  && Boolean(node.retrieve_config)
+) || null)
 
 watch(activePlan, (plan) => {
   if (!plan) {
@@ -176,6 +181,7 @@ async function updateTaskStatus(nextStatus: TaskRecord['status']) {
             :task-artifact-ids="taskArtifactIds"
             :task-title="task?.title"
             :task-prompt="task?.prompt"
+            :auto-loads-data="Boolean(rootRetrieveNode)"
             :disabled="!activePlan"
             @started="onRunStarted"
           />
@@ -476,6 +482,65 @@ async function updateTaskStatus(nextStatus: TaskRecord['status']) {
               <p v-if="selectedNode.source" class="text-muted">
                 Source: {{ selectedNode.source }}
               </p>
+              <div v-if="selectedNode.retrieve_config" class="space-y-1.5">
+                <p class="text-xs font-medium text-muted uppercase tracking-wide">
+                  Retrieve config
+                </p>
+                <div class="grid gap-2 text-muted sm:grid-cols-2">
+                  <p v-if="selectedNode.retrieve_config.match">
+                    Title match: {{ selectedNode.retrieve_config.match }}
+                  </p>
+                  <p v-if="selectedNode.retrieve_config.task_id">
+                    Task scope: {{ selectedNode.retrieve_config.task_id }}
+                  </p>
+                  <p v-if="selectedNode.retrieve_config.time_window">
+                    Time window: {{ selectedNode.retrieve_config.time_window }}
+                  </p>
+                  <p v-if="selectedNode.retrieve_config.content_search">
+                    Content search: {{ selectedNode.retrieve_config.content_search }}
+                  </p>
+                  <p v-if="selectedNode.retrieve_config.types?.length">
+                    Types: {{ selectedNode.retrieve_config.types.join(', ') }}
+                  </p>
+                  <p>
+                    Limit: {{ selectedNode.retrieve_config.limit }}
+                  </p>
+                  <p>
+                    Sort: {{ selectedNode.retrieve_config.sort }}
+                  </p>
+                </div>
+              </div>
+              <div v-if="selectedNode.type === 'http_fetch'" class="space-y-1.5">
+                <p class="text-xs font-medium text-muted uppercase tracking-wide">
+                  HTTP fetch config
+                </p>
+                <div class="grid gap-2 text-muted sm:grid-cols-2">
+                  <p v-if="selectedNode.url">
+                    URL: {{ selectedNode.url }}
+                  </p>
+                  <p v-if="selectedNode.method">
+                    Method: {{ selectedNode.method }}
+                  </p>
+                  <p v-if="selectedNode.response_type">
+                    Response type: {{ selectedNode.response_type }}
+                  </p>
+                  <p v-if="selectedNode.artifact_title">
+                    Artifact title: {{ selectedNode.artifact_title }}
+                  </p>
+                </div>
+                <div v-if="selectedNode.headers" class="space-y-1.5">
+                  <p class="text-xs font-medium text-muted uppercase tracking-wide">
+                    Headers
+                  </p>
+                  <JsonViewer :data="selectedNode.headers" compact />
+                </div>
+                <div v-if="selectedNode.body" class="space-y-1.5">
+                  <p class="text-xs font-medium text-muted uppercase tracking-wide">
+                    Request body
+                  </p>
+                  <ContentRenderer :content="selectedNode.body" compact />
+                </div>
+              </div>
               <p v-if="selectedNode.condition" class="text-muted">
                 <span class="font-medium">Condition:</span>
                 <code class="ml-1 rounded bg-elevated px-1.5 py-0.5 font-mono text-xs">{{ selectedNode.condition }}</code>

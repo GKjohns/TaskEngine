@@ -47,7 +47,9 @@ export default defineEventHandler(async (event) => {
 
     plan = existing
   } else {
-    const planJson = (body.plan_json as Plan | undefined) || await generatePlan(useOpenAI(), body.prompt)
+    const planJson = (body.plan_json as Plan | undefined) || await generatePlan(useOpenAI(), body.prompt, {
+      triggerType: body.trigger_type
+    })
     validationErrors = validatePlan(planJson)
 
     const { data: newPlanData, error: planError } = await client

@@ -242,6 +242,7 @@ export function nodeTypeIcon(type: PlanNodeType) {
     llm_summarize: 'i-lucide-scroll-text',
     llm_transform: 'i-lucide-wand-sparkles',
     retrieve: 'i-lucide-database-zap',
+    http_fetch: 'i-lucide-globe',
     branch: 'i-lucide-git-branch',
     wait: 'i-lucide-timer',
     review: 'i-lucide-message-circle-warning',
@@ -252,7 +253,7 @@ export function nodeTypeIcon(type: PlanNodeType) {
   return icons[type]
 }
 
-export function nodeTypeBadgeColor(type: PlanNodeType): 'primary' | 'success' | 'neutral' {
+export function nodeTypeBadgeColor(type: PlanNodeType): 'primary' | 'success' | 'neutral' | 'info' {
   if (type.startsWith('agent_')) {
     return 'primary'
   }
@@ -261,15 +262,30 @@ export function nodeTypeBadgeColor(type: PlanNodeType): 'primary' | 'success' | 
     return 'success'
   }
 
+  if (type === 'http_fetch') {
+    return 'info'
+  }
+
   return 'neutral'
 }
 
 export function summarizeNode(node: PlanNode) {
   if (node.prompt) return truncateText(node.prompt, 120)
   if (node.message) return truncateText(node.message, 120)
+  if (node.retrieve_config) {
+    const parts = [
+      node.retrieve_config.match ? `title: ${node.retrieve_config.match}` : '',
+      node.retrieve_config.task_id ? 'task-scoped' : '',
+      node.retrieve_config.time_window ? `window: ${node.retrieve_config.time_window}` : '',
+      node.retrieve_config.types?.length ? `types: ${node.retrieve_config.types.join(', ')}` : ''
+    ].filter(Boolean)
+    return parts.length ? `Retrieve ${parts.join(' · ')}` : 'Retrieve dynamic artifacts'
+  }
+  if (node.url) return `Fetch: ${truncateText(node.url, 90)}`
   if (node.source) return `Source: ${node.source}`
   if (node.condition) return `Condition: ${node.condition}`
   if (node.duration) return `Duration: ${node.duration}`
+  if (node.artifact_title) return `Fetched artifact: ${node.artifact_title}`
   if (node.title) return `Output: ${node.title}`
   return node.description
 }

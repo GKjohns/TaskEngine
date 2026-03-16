@@ -8,6 +8,7 @@ const props = defineProps<{
   taskArtifactIds?: string[]
   taskTitle?: string
   taskPrompt?: string
+  autoLoadsData?: boolean
   disabled?: boolean
   compact?: boolean
 }>()
@@ -89,7 +90,9 @@ async function startRun() {
   <UModal
     v-model:open="open"
     title="Run task"
-    description="Review the input documents for this run. These are pre-selected from the task configuration."
+    :description="autoLoadsData
+      ? 'This task can load data automatically. Select documents below only if you want to override that behavior for this run.'
+      : 'Review the input documents for this run. These are pre-selected from the task configuration.'"
   >
     <UButton
       color="primary"
@@ -108,6 +111,14 @@ async function startRun() {
           color="error"
           variant="soft"
           :description="errorMessage"
+        />
+
+        <UAlert
+          v-if="autoLoadsData"
+          color="info"
+          variant="soft"
+          title="Automatic data loading is enabled"
+          description="Leave the selection empty to let the retrieve node load fresh data for this run. Select documents below only if you want to override it."
         />
 
         <UAlert

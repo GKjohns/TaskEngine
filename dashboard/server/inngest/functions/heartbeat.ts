@@ -45,7 +45,7 @@ export const heartbeatCheck = inngest.createFunction(
     for (const job of dueJobs) {
       await step.run(`dispatch-${job.id}`, async () => {
         const supabase = createServiceClient()
-        const { run, planId } = await createPendingRunForTask(supabase, job.task_id, job.id)
+        const { run, planId, taskInputArtifactIds } = await createPendingRunForTask(supabase, job.task_id, job.id)
 
         const updateResult = await supabase
           .from('jobs')
@@ -63,7 +63,8 @@ export const heartbeatCheck = inngest.createFunction(
           runId: run.id,
           planId,
           taskId: job.task_id,
-          jobId: job.id
+          jobId: job.id,
+          taskInputArtifactIds
         })
       })
     }

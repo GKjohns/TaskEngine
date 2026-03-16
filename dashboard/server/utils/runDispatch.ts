@@ -8,6 +8,7 @@ interface TriggerRunResult {
   run: Database['public']['Tables']['runs']['Row']
   planId: string
   jobId: string | null
+  taskInputArtifactIds: string[]
 }
 
 export async function createPendingRunForTask(
@@ -71,9 +72,10 @@ export async function createPendingRunForTask(
     jobId = job?.id || null
   }
 
-  const resolvedArtifactIds = inputArtifactIds?.length
-    ? inputArtifactIds
-    : (Array.isArray(task.input_artifact_ids) ? task.input_artifact_ids as string[] : [])
+  const taskInputArtifactIds = Array.isArray(task.input_artifact_ids)
+    ? task.input_artifact_ids as string[]
+    : []
+  const explicitInputArtifactIds = inputArtifactIds?.length ? inputArtifactIds : []
 
   const { data: run, error: runError } = await client
     .from('runs')
@@ -82,7 +84,7 @@ export async function createPendingRunForTask(
       plan_id: planId,
       job_id: jobId,
       status: 'pending',
-      input_artifact_ids: resolvedArtifactIds
+      input_artifact_ids: explicitInputArtifactIds
     })
     .select()
     .single()
@@ -99,7 +101,8 @@ export async function createPendingRunForTask(
   return {
     run: createdRun,
     planId,
-    jobId
+    jobId,
+    taskInputArtifactIds
   }
 }
 
@@ -109,6 +112,7 @@ export async function sendRunStartEvent(input: {
   taskId: string
   jobId: string | null
   inputArtifactIds?: string[]
+  taskInputArtifactIds?: string[]
 }) {
   await inngest.send({
     name: 'task-engine/run.start',

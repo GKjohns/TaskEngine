@@ -27,6 +27,7 @@ function getLogNumber(value: unknown) {
 
 async function markRunAndJobStatus(input: {
   runId: string
+  taskId?: string
   jobId: string | null
   runStatus: RunStatus
   jobStatus?: 'running' | 'waiting_review' | 'completed' | 'failed'
@@ -58,6 +59,13 @@ async function markRunAndJobStatus(input: {
       })
       .eq('id', input.jobId)
   }
+
+  if (input.taskId && input.runStatus === 'completed' && input.completed) {
+    await supabase
+      .from('tasks')
+      .update({ last_completed_run_at: now })
+      .eq('id', input.taskId)
+  }
 }
 
 ensureNodeExecutorsRegistered()
@@ -66,15 +74,17 @@ export const executeRun = inngest.createFunction(
   { id: 'execute-run', retries: 0 },
   { event: 'task-engine/run.start' },
   async ({ event, step }) => {
-    const { runId, planId, taskId, jobId, inputArtifactIds: rawInputArtifactIds } = event.data as {
+    const { runId, planId, taskId, jobId, inputArtifactIds: rawInputArtifactIds, taskInputArtifactIds: rawTaskInputArtifactIds } = event.data as {
       runId: string
       planId: string
       taskId: string
       jobId: string | null
       inputArtifactIds?: string[]
+      taskInputArtifactIds?: string[]
     }
 
     const runInputArtifactIds = Array.isArray(rawInputArtifactIds) ? rawInputArtifactIds : []
+    const taskInputArtifactIds = Array.isArray(rawTaskInputArtifactIds) ? rawTaskInputArtifactIds : []
 
     const nodeStates: Record<string, NodeState> = {}
 
@@ -208,6 +218,25 @@ export const executeRun = inngest.createFunction(
                 .from('artifacts')
                 .select('id, title, content, type, metadata_json, storage_path')
                 .in('id', runInputArtifactIds)
+
+              if (artifactError) {
+                throw new Error(artifactError.message)
+              }
+
+              inputArtifacts = artifacts || []
+            } else if (
+              taskInputArtifactIds.length > 0
+              && (
+                node.type !== 'retrieve'
+                || (!node.retrieve_config && !node.source)
+              )
+            ) {
+              inputArtifactIds = taskInputArtifactIds
+
+              const { data: artifacts, error: artifactError } = await supabase
+                .from('artifacts')
+                .select('id, title, content, type, metadata_json, storage_path')
+                .in('id', taskInputArtifactIds)
 
               if (artifactError) {
                 throw new Error(artifactError.message)
@@ -470,6 +499,7 @@ export const executeRun = inngest.createFunction(
       await step.run('mark-completed', async () => {
         await markRunAndJobStatus({
           runId,
+          taskId,
           jobId,
           runStatus: 'completed',
           jobStatus: 'completed',

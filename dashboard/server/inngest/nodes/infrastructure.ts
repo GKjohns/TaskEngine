@@ -8,6 +8,21 @@ import {
   describeWait
 } from './describe'
 import { joinArtifactInputs } from './input'
+import type { Database } from '../../../shared/types/database'
+import type { ArtifactType, RetrieveConfig, RetrieveTimeWindow } from '../../../shared/types/task-engine'
+
+type ArtifactRow = Database['public']['Tables']['artifacts']['Row']
+
+interface ResolvedRetrieveConfig {
+  match: string | null
+  taskId: string | null
+  timeWindow: RetrieveTimeWindow | null
+  contentSearch: string | null
+  types: ArtifactType[] | null
+  limit: number | null
+  sort: 'newest' | 'oldest'
+  format: 'structured' | 'legacy'
+}
 
 function replaceTitleTokens(value: string) {
   const now = new Date()
@@ -92,8 +107,148 @@ export function parseDurationToMs(duration: string | null) {
   }
 }
 
+function toRuntimeArtifact(artifact: ArtifactRow) {
+  return {
+    title: artifact.title,
+    content: artifact.content || '',
+    type: artifact.type,
+    metadata: {
+      source_id: artifact.id
+    }
+  }
+}
+
+function normalizeRetrieveConfig(config: RetrieveConfig | null): ResolvedRetrieveConfig | null {
+  if (!config) {
+    return null
+  }
+
+  return {
+    match: config.match || null,
+    taskId: config.task_id || null,
+    timeWindow: config.time_window || null,
+    contentSearch: config.content_search || null,
+    types: Array.isArray(config.types) && config.types.length ? config.types : null,
+    limit: Number.isFinite(config.limit) && config.limit > 0 ? Math.floor(config.limit) : 10,
+    sort: config.sort === 'oldest' ? 'oldest' : 'newest',
+    format: 'structured'
+  }
+}
+
+function resolveLegacyRetrieveConfig(source: string | null, filter: string | null): ResolvedRetrieveConfig | null {
+  if (!source) {
+    return null
+  }
+
+  return {
+    match: source.startsWith('task:') ? null : source,
+    taskId: source.startsWith('task:') ? source.replace('task:', '') : null,
+    timeWindow: filter === 'last_7_days' ? '7d' : null,
+    contentSearch: null,
+    types: null,
+    limit: null,
+    sort: 'newest',
+    format: 'legacy'
+  }
+}
+
+function daysAgo(days: number) {
+  return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+}
+
+async function resolveTimeWindowStart(
+  context: Parameters<NodeExecutor>[1],
+  timeWindow: RetrieveTimeWindow | null
+) {
+  if (!timeWindow) {
+    return {
+      startAt: null,
+      effectiveWindow: null
+    }
+  }
+
+  if (timeWindow === '24h') {
+    return { startAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), effectiveWindow: '24h' as const }
+  }
+
+  if (timeWindow === '7d') {
+    return { startAt: daysAgo(7), effectiveWindow: '7d' as const }
+  }
+
+  if (timeWindow === '30d') {
+    return { startAt: daysAgo(30), effectiveWindow: '30d' as const }
+  }
+
+  const { data, error } = await context.supabase
+    .from('tasks')
+    .select('last_completed_run_at')
+    .eq('id', context.taskId)
+    .single()
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  if (data?.last_completed_run_at) {
+    return {
+      startAt: data.last_completed_run_at,
+      effectiveWindow: 'since_last_run' as const
+    }
+  }
+
+  return {
+    startAt: daysAgo(7),
+    effectiveWindow: '7d' as const
+  }
+}
+
+async function loadArtifactsByIds(
+  context: Parameters<NodeExecutor>[1],
+  artifactIds: string[]
+) {
+  if (!artifactIds.length) {
+    return []
+  }
+
+  const { data, error } = await context.supabase
+    .from('artifacts')
+    .select('id, title, content, type, metadata_json, storage_path, created_at, task_id, created_by_run_id, created_by_node_id, description')
+    .in('id', artifactIds)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  const artifactsById = new Map((data || []).map(artifact => [artifact.id, artifact]))
+
+  return artifactIds
+    .map(id => artifactsById.get(id))
+    .filter((artifact): artifact is ArtifactRow => Boolean(artifact))
+}
+
+async function loadTaskInputArtifacts(context: Parameters<NodeExecutor>[1]) {
+  const { data: task, error: taskError } = await context.supabase
+    .from('tasks')
+    .select('input_artifact_ids')
+    .eq('id', context.taskId)
+    .single()
+
+  if (taskError) {
+    throw new Error(taskError.message)
+  }
+
+  const artifactIds = Array.isArray(task?.input_artifact_ids)
+    ? task.input_artifact_ids.filter((value): value is string => typeof value === 'string')
+    : []
+
+  return loadArtifactsByIds(context, artifactIds)
+}
+
 export const retrieve: NodeExecutor = async (node, context) => {
-  if (context.inputArtifacts.length > 0) {
+  const isRootNode = node.depends_on.length === 0
+  const hasUserOverride = isRootNode && context.inputArtifacts.length > 0
+
+  if (hasUserOverride) {
     const count = context.inputArtifacts.length
     return {
       artifacts: context.inputArtifacts.map(artifact => ({
@@ -104,10 +259,36 @@ export const retrieve: NodeExecutor = async (node, context) => {
           source_id: artifact.id
         }
       })),
-      description: describeRetrieve(count, 'selected artifacts'),
+      description: describeRetrieve({
+        count,
+        fallbackSource: 'run_input'
+      }),
       logs: {
         retrieved_count: count,
         source: 'run_input',
+        filter: null,
+        used_override: true
+      }
+    }
+  }
+
+  const config = normalizeRetrieveConfig(node.retrieve_config) || resolveLegacyRetrieveConfig(node.source, node.filter)
+
+  if (!config) {
+    const count = context.inputArtifacts.length
+    return {
+      artifacts: context.inputArtifacts.map(artifact => ({
+        title: artifact.title,
+        content: artifact.content || '',
+        type: artifact.type,
+        metadata: {
+          source_id: artifact.id
+        }
+      })),
+      description: describeRetrieve({ count }),
+      logs: {
+        retrieved_count: count,
+        source: 'passthrough',
         filter: null
       }
     }
@@ -115,20 +296,33 @@ export const retrieve: NodeExecutor = async (node, context) => {
 
   let query = context.supabase
     .from('artifacts')
-    .select('id, title, content, type, metadata_json, storage_path')
-    .order('created_at', { ascending: false })
+    .select('id, title, content, type, metadata_json, storage_path, created_at, task_id, created_by_run_id, created_by_node_id, description')
+    .order('created_at', { ascending: config.sort === 'oldest' })
 
-  if (node.source) {
-    if (node.source.startsWith('task:')) {
-      query = query.eq('task_id', node.source.replace('task:', ''))
-    } else {
-      query = query.ilike('title', `%${node.source}%`)
-    }
+  if (config.match) {
+    query = query.ilike('title', `%${config.match}%`)
   }
 
-  if (node.filter === 'last_7_days') {
-    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-    query = query.gte('created_at', weekAgo)
+  if (config.taskId) {
+    query = query.eq('task_id', config.taskId)
+  }
+
+  if (config.types?.length) {
+    query = query.in('type', config.types)
+  }
+
+  if (config.contentSearch) {
+    query = query.ilike('content', `%${config.contentSearch}%`)
+  }
+
+  const timeWindow = await resolveTimeWindowStart(context, config.timeWindow)
+
+  if (timeWindow.startAt) {
+    query = query.gte('created_at', timeWindow.startAt)
+  }
+
+  if (config.limit) {
+    query = query.limit(config.limit)
   }
 
   const { data, error } = await query
@@ -137,22 +331,60 @@ export const retrieve: NodeExecutor = async (node, context) => {
     throw new Error(error.message)
   }
 
-  const count = data?.length || 0
+  const results = data || []
+  const count = results.length
+
+  if (!count && isRootNode) {
+    const fallbackArtifacts = await loadTaskInputArtifacts(context)
+
+    if (fallbackArtifacts.length > 0) {
+      return {
+        artifacts: fallbackArtifacts.map(toRuntimeArtifact),
+        description: describeRetrieve({
+          count: fallbackArtifacts.length,
+          fallbackSource: 'task_input_artifacts'
+        }),
+        logs: {
+          retrieved_count: fallbackArtifacts.length,
+          source: config.format === 'legacy' ? node.source : 'retrieve_config',
+          filter: node.filter,
+          config_format: config.format,
+          match: config.match,
+          task_id: config.taskId,
+          time_window: config.timeWindow,
+          effective_time_window: timeWindow.effectiveWindow,
+          content_search: config.contentSearch,
+          types: config.types,
+          limit: config.limit,
+          sort: config.sort,
+          fallback_used: 'task_input_artifacts'
+        }
+      }
+    }
+  }
 
   return {
-    artifacts: (data || []).map(artifact => ({
-      title: artifact.title,
-      content: artifact.content || '',
-      type: artifact.type,
-      metadata: {
-        source_id: artifact.id
-      }
-    })),
-    description: describeRetrieve(count, node.source),
+    artifacts: results.map(toRuntimeArtifact),
+    description: describeRetrieve({
+      count,
+      source: node.source,
+      match: config.match,
+      taskId: config.taskId,
+      timeWindow: timeWindow.effectiveWindow
+    }),
     logs: {
       retrieved_count: count,
       source: node.source,
-      filter: node.filter
+      filter: node.filter,
+      config_format: config.format,
+      match: config.match,
+      task_id: config.taskId,
+      time_window: config.timeWindow,
+      effective_time_window: timeWindow.effectiveWindow,
+      content_search: config.contentSearch,
+      types: config.types,
+      limit: config.limit,
+      sort: config.sort
     }
   }
 }
