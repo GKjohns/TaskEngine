@@ -4,6 +4,7 @@ const open = ref(false)
 const { pendingReviewCount } = useDashboard()
 
 const links = [
+  { id: 'home', label: 'Home', icon: 'i-lucide-house', to: '/' },
   { id: 'plans', label: 'Plans', icon: 'i-lucide-workflow', to: '/plans' },
   { id: 'tasks', label: 'Tasks', icon: 'i-lucide-list-checks', to: '/tasks' },
   { id: 'artifacts', label: 'Artifacts', icon: 'i-lucide-file-text', to: '/artifacts' },
@@ -12,6 +13,7 @@ const links = [
 ] as const
 
 function isActiveLink(path: string) {
+  if (path === '/') return route.path === '/'
   return route.path === path || route.path.startsWith(`${path}/`)
 }
 </script>

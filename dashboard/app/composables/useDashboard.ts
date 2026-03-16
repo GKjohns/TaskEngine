@@ -5,6 +5,7 @@ const useSharedDashboard = createSharedComposable(() => {
 
   if (import.meta.client) {
     defineShortcuts({
+      'g-h': () => router.push('/'),
       'g-p': () => router.push('/plans'),
       'g-t': () => router.push('/tasks'),
       'g-a': () => router.push('/artifacts'),
