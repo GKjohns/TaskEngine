@@ -20,7 +20,7 @@ function decodeHtmlEntities(value: string) {
     .replace(/&lt;/gi, '<')
     .replace(/&gt;/gi, '>')
     .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
+    .replace(/&#39;/gi, '\'')
 }
 
 function htmlToReadableText(html: string) {

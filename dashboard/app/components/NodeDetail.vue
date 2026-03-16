@@ -22,14 +22,18 @@ const toolCalls = computed(() => Array.isArray(logs.value.tool_calls) ? logs.val
 const perArtifactCalls = computed(() => Array.isArray(logs.value.calls) ? logs.value.calls as Array<Record<string, unknown>> : [])
 const errorMessage = computed(() => typeof logs.value.error === 'string' ? logs.value.error : '')
 const retrieveConfig = computed(() => props.node?.retrieve_config || null)
-const httpFetchConfig = computed(() => props.node?.type === 'http_fetch' ? {
-  url: props.node.url,
-  method: props.node.method,
-  headers: props.node.headers,
-  body: props.node.body,
-  response_type: props.node.response_type,
-  artifact_title: props.node.artifact_title
-} : null)
+const httpFetchConfig = computed(() => (
+  props.node?.type === 'http_fetch'
+    ? {
+        url: props.node.url,
+        method: props.node.method,
+        headers: props.node.headers,
+        body: props.node.body,
+        response_type: props.node.response_type,
+        artifact_title: props.node.artifact_title
+      }
+    : null
+))
 const retrieveRuntime = computed(() => ({
   retrievedCount: typeof logs.value.retrieved_count === 'number' ? logs.value.retrieved_count : null,
   effectiveTimeWindow: typeof logs.value.effective_time_window === 'string' ? logs.value.effective_time_window : null,
