@@ -3,7 +3,7 @@
 **Smarter data loading that gets the right context for each run, not just the artifacts the user remembered to pin.**
 Last updated: 2026-03-16
 
-> **Status: Planning**
+> **Status: Completed**
 
 ---
 
