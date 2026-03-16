@@ -2,6 +2,7 @@
 import { z } from 'zod'
 import type { ArtifactRecord, Plan, PlanRecord, TaskTriggerType } from '../../../shared/types/task-engine'
 import { artifactTypeColorMap } from '../../utils/taskEngine'
+import { suggestArtifactIds, taskLikelyNeedsDocuments } from '../../utils/artifactSelection'
 
 const router = useRouter()
 const route = useRoute()
@@ -48,6 +49,7 @@ type PlanSource = 'existing' | 'generate'
 const planSource = ref<PlanSource>(preselectedPlanId.value ? 'existing' : 'generate')
 const selectedPlanId = ref<string | null>(preselectedPlanId.value || null)
 const selectedArtifactIds = ref<string[]>([])
+const artifactSelectionMode = ref<'suggested' | 'manual'>('suggested')
 
 const form = reactive<TaskFormState>({
   title: '',
@@ -71,6 +73,7 @@ const { data: artifacts, status: artifactsLoadStatus } = useFetch<ArtifactRecord
 })
 
 function toggleArtifact(id: string) {
+  artifactSelectionMode.value = 'manual'
   const index = selectedArtifactIds.value.indexOf(id)
   if (index > -1) {
     selectedArtifactIds.value.splice(index, 1)
@@ -82,6 +85,21 @@ function toggleArtifact(id: string) {
 const selectedExistingPlan = computed(() =>
   (existingPlans.value || []).find(p => p.id === selectedPlanId.value) || null
 )
+
+const suggestedArtifactIds = computed(() => suggestArtifactIds({
+  artifacts: artifacts.value || [],
+  title: form.title,
+  prompt: form.prompt,
+  planTitle: selectedExistingPlan.value?.title,
+  planPrompt: selectedExistingPlan.value?.prompt
+}))
+
+const promptNeedsDocuments = computed(() => taskLikelyNeedsDocuments({
+  title: form.title,
+  prompt: form.prompt,
+  planTitle: selectedExistingPlan.value?.title,
+  planPrompt: selectedExistingPlan.value?.prompt
+}))
 
 const canPreview = computed(() => {
   if (planSource.value === 'existing') {
@@ -119,6 +137,24 @@ watch(() => existingPlans.value, (plans) => {
     }
   }
 })
+
+watch(suggestedArtifactIds, (ids) => {
+  if (artifactSelectionMode.value !== 'suggested') {
+    return
+  }
+
+  selectedArtifactIds.value = [...ids]
+}, { immediate: true })
+
+function applySuggestedArtifacts() {
+  artifactSelectionMode.value = 'suggested'
+  selectedArtifactIds.value = [...suggestedArtifactIds.value]
+}
+
+function clearArtifactSelection() {
+  artifactSelectionMode.value = 'manual'
+  selectedArtifactIds.value = []
+}
 
 function buildScheduleConfig() {
   return form.trigger_type === 'manual' || !form.next_run_at
@@ -222,6 +258,31 @@ function selectPlan(plan: PlanRecord) {
             </p>
           </div>
 
+          <UAlert
+            v-if="suggestedArtifactIds.length"
+            color="info"
+            variant="soft"
+            title="Suggested documents"
+            :description="`We found ${suggestedArtifactIds.length} likely match${suggestedArtifactIds.length !== 1 ? 'es' : ''} based on the task prompt and workflow.`"
+          >
+            <template #actions>
+              <UButton size="xs" color="info" variant="soft" @click="applySuggestedArtifacts">
+                Use suggested
+              </UButton>
+              <UButton size="xs" color="neutral" variant="ghost" @click="clearArtifactSelection">
+                Clear
+              </UButton>
+            </template>
+          </UAlert>
+
+          <UAlert
+            v-if="promptNeedsDocuments && !selectedArtifactIds.length"
+            color="warning"
+            variant="soft"
+            title="This task probably needs document context"
+            description="Pick the documents this task should use. If you leave this empty, scheduled runs may execute without the files the prompt is referring to."
+          />
+
           <div v-if="artifactsLoadStatus === 'pending'" class="flex items-center justify-center py-6">
             <UIcon name="i-lucide-loader-circle" class="size-5 animate-spin text-muted" />
           </div>
@@ -252,6 +313,14 @@ function selectPlan(plan: PlanRecord) {
                   </p>
                   <UBadge :color="artifactTypeColorMap[artifact.type]" variant="soft" size="xs">
                     {{ artifact.type }}
+                  </UBadge>
+                  <UBadge
+                    v-if="suggestedArtifactIds.includes(artifact.id)"
+                    color="info"
+                    variant="soft"
+                    size="xs"
+                  >
+                    Suggested
                   </UBadge>
                 </div>
                 <p v-if="artifact.description" class="mt-0.5 truncate text-xs text-muted">

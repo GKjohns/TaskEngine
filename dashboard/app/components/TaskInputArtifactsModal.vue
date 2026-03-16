@@ -1,19 +1,18 @@
 <script setup lang="ts">
-import type { ArtifactRecord, RunRecord } from '../../shared/types/task-engine'
+import type { ArtifactRecord } from '../../shared/types/task-engine'
 import { artifactTypeColorMap, truncateText } from '../utils/taskEngine'
 import { suggestArtifactIds, taskLikelyNeedsDocuments } from '../utils/artifactSelection'
 
 const props = defineProps<{
   taskId: string
-  taskArtifactIds?: string[]
   taskTitle?: string
   taskPrompt?: string
-  disabled?: boolean
-  compact?: boolean
+  planTitle?: string | null
+  currentArtifactIds?: string[]
 }>()
 
 const emit = defineEmits<{
-  started: [run: RunRecord]
+  saved: []
 }>()
 
 const open = ref(false)
@@ -28,25 +27,25 @@ const { data: artifacts, status: loadingStatus } = await useFetch<ArtifactRecord
 const suggestedArtifactIds = computed(() => suggestArtifactIds({
   artifacts: artifacts.value || [],
   title: props.taskTitle,
-  prompt: props.taskPrompt
+  prompt: props.taskPrompt,
+  planTitle: props.planTitle
 }))
 
 const promptNeedsDocuments = computed(() => taskLikelyNeedsDocuments({
   title: props.taskTitle,
-  prompt: props.taskPrompt
+  prompt: props.taskPrompt,
+  planTitle: props.planTitle
 }))
 
-watch(() => props.taskArtifactIds, (artifactIds) => {
-  selectedArtifactIds.value = artifactIds?.length ? [...artifactIds] : []
-}, { immediate: true })
-
 watch(open, (isOpen) => {
-  if (isOpen) {
-    selectedArtifactIds.value = props.taskArtifactIds?.length
-      ? [...props.taskArtifactIds]
-      : [...suggestedArtifactIds.value]
-    errorMessage.value = ''
+  if (!isOpen) {
+    return
   }
+
+  errorMessage.value = ''
+  selectedArtifactIds.value = props.currentArtifactIds?.length
+    ? [...props.currentArtifactIds]
+    : [...suggestedArtifactIds.value]
 })
 
 function toggleArtifact(id: string) {
@@ -62,23 +61,22 @@ function applySuggestions() {
   selectedArtifactIds.value = [...suggestedArtifactIds.value]
 }
 
-async function startRun() {
+async function saveDocuments() {
   pending.value = true
   errorMessage.value = ''
 
   try {
-    const run = await $fetch<RunRecord>('/api/runs', {
-      method: 'POST',
+    await $fetch(`/api/tasks/${props.taskId}`, {
+      method: 'PATCH',
       body: {
-        task_id: props.taskId,
-        artifact_ids: selectedArtifactIds.value.length > 0 ? selectedArtifactIds.value : undefined
+        input_artifact_ids: selectedArtifactIds.value
       }
     })
 
-    emit('started', run)
+    emit('saved')
     open.value = false
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'Failed to start the run.'
+    errorMessage.value = error instanceof Error ? error.message : 'Failed to update task documents.'
   } finally {
     pending.value = false
   }
@@ -88,17 +86,11 @@ async function startRun() {
 <template>
   <UModal
     v-model:open="open"
-    title="Run task"
-    description="Review the input documents for this run. These are pre-selected from the task configuration."
+    title="Edit task documents"
+    description="Choose the documents that should be included on future runs for this task."
   >
-    <UButton
-      color="primary"
-      icon="i-lucide-play"
-      :disabled="disabled"
-      :size="compact ? 'sm' : 'md'"
-      @click="open = true"
-    >
-      Run now
+    <UButton color="neutral" variant="soft" icon="i-lucide-files">
+      Edit documents
     </UButton>
 
     <template #body>
@@ -111,15 +103,15 @@ async function startRun() {
         />
 
         <UAlert
-          v-else-if="!taskArtifactIds?.length && suggestedArtifactIds.length"
+          v-else-if="!currentArtifactIds?.length && suggestedArtifactIds.length"
           color="info"
           variant="soft"
-          title="Suggested documents selected"
-          :description="`We pre-selected ${suggestedArtifactIds.length} likely match${suggestedArtifactIds.length !== 1 ? 'es' : ''} based on the task prompt.`"
+          title="Suggested documents ready"
+          :description="`We found ${suggestedArtifactIds.length} likely match${suggestedArtifactIds.length !== 1 ? 'es' : ''} based on the task prompt.`"
         >
           <template #actions>
             <UButton size="xs" color="info" variant="soft" @click="applySuggestions">
-              Re-apply suggestions
+              Use suggested
             </UButton>
           </template>
         </UAlert>
@@ -128,8 +120,8 @@ async function startRun() {
           v-if="promptNeedsDocuments && !selectedArtifactIds.length"
           color="warning"
           variant="soft"
-          title="This run may be missing document context"
-          description="If the task depends on uploaded files, select the right documents before starting the run."
+          title="This task probably needs document context"
+          description="If this task runs on a schedule, saving the right documents here prevents future runs from starting without the context they expect."
         />
 
         <div v-if="loadingStatus === 'pending'" class="flex items-center justify-center py-8">
@@ -187,12 +179,12 @@ async function startRun() {
 
         <div v-else class="rounded-lg border border-default bg-elevated/40 p-4 text-center">
           <p class="text-sm text-muted">
-            No documents are available yet. This task will run without pre-selected inputs.
+            No documents are available yet.
           </p>
         </div>
 
         <div v-if="selectedArtifactIds.length" class="rounded-lg bg-primary/5 px-3 py-2 text-sm text-primary">
-          {{ selectedArtifactIds.length }} document{{ selectedArtifactIds.length !== 1 ? 's' : '' }} selected as input
+          {{ selectedArtifactIds.length }} document{{ selectedArtifactIds.length !== 1 ? 's' : '' }} saved for future runs
         </div>
       </div>
     </template>
@@ -202,12 +194,8 @@ async function startRun() {
         <UButton color="neutral" variant="ghost" @click="open = false">
           Cancel
         </UButton>
-        <UButton
-          icon="i-lucide-play"
-          :loading="pending"
-          @click="startRun"
-        >
-          {{ selectedArtifactIds.length ? `Run with ${selectedArtifactIds.length} document${selectedArtifactIds.length !== 1 ? 's' : ''}` : 'Run without selection' }}
+        <UButton icon="i-lucide-save" :loading="pending" @click="saveDocuments">
+          Save documents
         </UButton>
       </div>
     </template>

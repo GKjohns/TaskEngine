@@ -9,6 +9,7 @@ import {
   runStatusColorMap,
   taskStatusColorMap
 } from '../../utils/taskEngine'
+import { taskLikelyNeedsDocuments } from '../../utils/artifactSelection'
 
 interface TaskDetail extends TaskRecord {
   current_plan?: Pick<PlanRecord, 'id' | 'title' | 'plan_json' | 'version' | 'created_at'> | null
@@ -48,7 +49,7 @@ const inputArtifactQuery = computed(() => taskArtifactIds.value.length
   ? { ids: taskArtifactIds.value.join(',') }
   : {})
 
-const { data: inputArtifacts } = await useFetch<ArtifactRecord[]>('/api/artifacts', {
+const { data: inputArtifacts, refresh: refreshInputArtifacts } = await useFetch<ArtifactRecord[]>('/api/artifacts', {
   query: inputArtifactQuery,
   default: () => []
 })
@@ -58,6 +59,12 @@ const activePlan = computed(() => {
   const plans = [...(task.value?.plans || [])].sort((a, b) => b.version - a.version)
   return plans[0] ?? null
 })
+
+const promptNeedsDocuments = computed(() => taskLikelyNeedsDocuments({
+  title: task.value?.title,
+  prompt: task.value?.prompt,
+  planTitle: activePlan.value?.title
+}))
 
 const runs = computed(() => [...(task.value?.runs || [])].sort((a, b) => {
   const aTime = a.started_at ? new Date(a.started_at).getTime() : 0
@@ -97,6 +104,13 @@ async function replanTask() {
 async function onRunStarted(run: RunRecord) {
   await refresh()
   await router.push(`/runs/${run.id}`)
+}
+
+async function onDocumentsSaved() {
+  await Promise.all([
+    refresh(),
+    refreshInputArtifacts()
+  ])
 }
 
 async function updateTaskStatus(nextStatus: TaskRecord['status']) {
@@ -160,8 +174,19 @@ async function updateTaskStatus(nextStatus: TaskRecord['status']) {
           <RunTaskModal
             :task-id="taskId"
             :task-artifact-ids="taskArtifactIds"
+            :task-title="task?.title"
+            :task-prompt="task?.prompt"
             :disabled="!activePlan"
             @started="onRunStarted"
+          />
+          <TaskInputArtifactsModal
+            v-if="task"
+            :task-id="taskId"
+            :task-title="task.title"
+            :task-prompt="task.prompt"
+            :plan-title="activePlan?.title"
+            :current-artifact-ids="taskArtifactIds"
+            @saved="onDocumentsSaved"
           />
           <UButton icon="i-lucide-sparkles" :loading="replanPending" @click="replanTask">
             Replan
@@ -225,6 +250,14 @@ async function updateTaskStatus(nextStatus: TaskRecord['status']) {
           <ContentRenderer :content="task.prompt" />
         </div>
       </UCard>
+
+      <UAlert
+        v-if="task && promptNeedsDocuments && !taskArtifactIds.length"
+        color="warning"
+        variant="soft"
+        title="This task has no saved input documents"
+        description="The prompt looks like it depends on uploaded files or reports. Add the right documents so future runs keep the context they need."
+      />
 
       <UCard v-if="inputArtifacts?.length" class="border border-default">
         <div class="space-y-4">

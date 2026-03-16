@@ -7,7 +7,8 @@ const updateTaskSchema = z.object({
   prompt: z.string().trim().min(1).optional(),
   trigger_type: z.enum(['manual', 'scheduled', 'heartbeat']).optional(),
   schedule_config: z.record(z.string(), z.unknown()).optional(),
-  status: z.enum(['active', 'paused', 'archived']).optional()
+  status: z.enum(['active', 'paused', 'archived']).optional(),
+  input_artifact_ids: z.array(z.string().uuid()).optional()
 }).refine(value => Object.keys(value).length > 0, 'At least one field is required')
 
 export default defineEventHandler(async (event) => {

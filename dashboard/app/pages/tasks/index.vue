@@ -260,6 +260,8 @@ async function onRunStarted() {
                 v-if="task.status !== 'archived' && task.latestPlanVersion"
                 :task-id="task.id"
                 :task-artifact-ids="task.input_artifact_ids"
+                :task-title="task.title"
+                :task-prompt="task.prompt"
                 compact
                 @started="onRunStarted"
               />
