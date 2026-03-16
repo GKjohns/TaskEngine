@@ -1,34 +1,44 @@
 <script setup lang="ts">
 import type { ArtifactRecord, TaskRecord } from '../../../shared/types/task-engine'
+import { artifactTypeColorMap, formatDateTime } from '../../utils/taskEngine'
+
+type ArtifactListItem = ArtifactRecord & {
+  task_title?: string | null
+  produced_by_run_id?: string | null
+  download_url?: string | null
+}
 
 const typeFilter = ref<'all' | ArtifactRecord['type']>('all')
 const taskFilter = ref<'all' | string>('all')
+const searchQuery = ref('')
+const viewMode = ref<'cards' | 'list'>('cards')
 
-const { data, status, error, refresh } = await useFetch<ArtifactRecord[]>('/api/artifacts', {
+const artifactQuery = computed(() => ({
+  ...(typeFilter.value !== 'all' ? { type: typeFilter.value } : {}),
+  ...(taskFilter.value !== 'all' ? { task_id: taskFilter.value } : {}),
+  ...(searchQuery.value.trim() ? { q: searchQuery.value.trim() } : {})
+}))
+
+const { data, status, error, refresh } = await useFetch<ArtifactListItem[]>('/api/artifacts', {
+  query: artifactQuery,
   default: () => []
 })
 
 const { data: tasks } = await useFetch<TaskRecord[]>('/api/tasks', {
   default: () => []
 })
-
-const visibleArtifacts = computed(() => (data.value || []).filter((artifact) => {
-  const matchesType = typeFilter.value === 'all' || artifact.type === typeFilter.value
-  const matchesTask = taskFilter.value === 'all' || artifact.task_id === taskFilter.value
-  return matchesType && matchesTask
-}))
 </script>
 
 <template>
-  <DashboardPage title="Artifacts">
+  <DashboardPage title="Documents">
     <div class="space-y-6">
       <div class="flex items-center justify-between gap-3">
         <div>
           <h2 class="text-base font-semibold text-highlighted">
-            Artifact browser
+            Document library
           </h2>
           <p class="mt-1 text-sm text-muted">
-            Browse generated outputs by type or task, then open a full artifact view for richer rendering.
+            Search document contents, switch between card and list views, and jump back to the task or run that produced each output.
           </p>
         </div>
 
@@ -46,7 +56,16 @@ const visibleArtifacts = computed(() => (data.value || []).filter((artifact) => 
         </div>
       </div>
 
-      <div class="grid gap-3 lg:grid-cols-2">
+      <div class="grid gap-3 xl:grid-cols-[minmax(0,1.3fr)_220px_220px_auto]">
+        <UFormField label="Search">
+          <UInput
+            v-model="searchQuery"
+            class="w-full"
+            icon="i-lucide-search"
+            placeholder="Search titles, descriptions, and inline content"
+          />
+        </UFormField>
+
         <UFormField label="Type">
           <USelect
             v-model="typeFilter"
@@ -71,29 +90,89 @@ const visibleArtifacts = computed(() => (data.value || []).filter((artifact) => 
             class="w-full"
           />
         </UFormField>
+
+        <UFormField label="View">
+          <div class="flex rounded-lg border border-default p-1">
+            <button
+              type="button"
+              class="flex-1 rounded-md px-3 py-2 text-sm transition"
+              :class="viewMode === 'cards' ? 'bg-primary/10 text-primary' : 'text-muted hover:bg-elevated/60'"
+              @click="viewMode = 'cards'"
+            >
+              Cards
+            </button>
+            <button
+              type="button"
+              class="flex-1 rounded-md px-3 py-2 text-sm transition"
+              :class="viewMode === 'list' ? 'bg-primary/10 text-primary' : 'text-muted hover:bg-elevated/60'"
+              @click="viewMode = 'list'"
+            >
+              List
+            </button>
+          </div>
+        </UFormField>
       </div>
 
       <UAlert
         v-if="error"
         color="error"
         variant="soft"
-        title="Could not load artifacts"
+        title="Could not load documents"
         :description="error.message"
       />
 
+      <div v-else-if="status === 'pending'" class="grid gap-4 xl:grid-cols-2">
+        <div
+          v-for="index in 4"
+          :key="index"
+          class="h-64 animate-pulse rounded-xl border border-default bg-elevated/40"
+        />
+      </div>
+
       <PageEmptyState
-        v-else-if="!visibleArtifacts.length && status !== 'pending'"
-        title="No artifacts in this view"
-        description="Change the filters or run a task that emits artifacts."
+        v-else-if="!data?.length"
+        title="No documents in this view"
+        description="Adjust the filters or run a task that produces a document."
         icon="i-lucide-file-text"
+        action-label="Create a task"
+        action-to="/tasks/new"
+        action-icon="i-lucide-plus"
       />
 
-      <div v-else class="grid gap-4 xl:grid-cols-2">
+      <div v-else-if="viewMode === 'cards'" class="grid gap-4 xl:grid-cols-2">
         <ArtifactPreview
-          v-for="artifact in visibleArtifacts"
+          v-for="artifact in data"
           :key="artifact.id"
           :artifact="artifact"
         />
+      </div>
+
+      <div v-else class="overflow-hidden rounded-xl border border-default">
+        <NuxtLink
+          v-for="artifact in data"
+          :key="artifact.id"
+          :to="`/artifacts/${artifact.id}`"
+          class="flex items-center gap-4 border-b border-default px-4 py-3 transition last:border-b-0 hover:bg-elevated/60"
+        >
+          <UIcon name="i-lucide-file-text" class="size-4 shrink-0 text-muted" />
+
+          <div class="min-w-0 flex-1">
+            <p class="truncate text-sm font-medium text-highlighted">
+              {{ artifact.title }}
+            </p>
+            <p class="truncate text-xs text-dimmed">
+              {{ artifact.task_title ? `Produced by ${artifact.task_title}` : artifact.description || 'No description' }}
+            </p>
+          </div>
+
+          <UBadge :color="artifactTypeColorMap[artifact.type]" variant="soft" class="shrink-0">
+            {{ artifact.type }}
+          </UBadge>
+
+          <span class="shrink-0 text-xs tabular-nums text-dimmed">
+            {{ formatDateTime(artifact.created_at) }}
+          </span>
+        </NuxtLink>
       </div>
     </div>
   </DashboardPage>

@@ -2,16 +2,29 @@ import { createSharedComposable } from '@vueuse/core'
 
 const useSharedDashboard = createSharedComposable(() => {
   const router = useRouter()
+  const route = useRoute()
 
   if (import.meta.client) {
     defineShortcuts({
       'g-h': () => router.push('/'),
-      'g-p': () => router.push('/plans'),
       'g-t': () => router.push('/tasks'),
-      'g-a': () => router.push('/artifacts'),
-      'g-r': () => router.push('/runs'),
+      'g-w': () => router.push('/plans'),
+      'g-s': () => router.push('/jobs'),
+      'g-d': () => router.push('/artifacts'),
+      'g-a': () => router.push('/runs'),
       'g-v': () => router.push('/reviews'),
-      'n': () => router.push('/tasks/new')
+      'g-p': () => router.push('/plans'),
+      'g-r': () => router.push('/runs'),
+      'n': () => router.push('/tasks/new'),
+      'r': () => {
+        if (route.path !== '/') {
+          return
+        }
+
+        window.requestAnimationFrame(() => {
+          document.querySelector<HTMLElement>('[data-review-shortcut-target="true"]')?.focus()
+        })
+      }
     })
   }
 

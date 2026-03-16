@@ -90,7 +90,7 @@ async function onRunStarted() {
             Your task library
           </h2>
           <p class="mt-1 text-sm text-muted">
-            Filter active work, inspect the latest plan version, and launch runs directly from the dashboard.
+            Filter active work, inspect the latest workflow version, and launch activity directly from one view.
           </p>
         </div>
 
@@ -164,13 +164,18 @@ async function onRunStarted() {
                   <UBadge :color="triggerColorMap[task.trigger_type]" variant="subtle">
                     {{ task.trigger_type }}
                   </UBadge>
-                  <NuxtLink v-if="task.currentPlan" :to="`/plans/${task.currentPlan.id}`" class="hover:opacity-80 transition" @click.stop>
+                  <NuxtLink
+                    v-if="task.currentPlan"
+                    :to="`/plans/${task.currentPlan.id}`"
+                    class="hover:opacity-80 transition"
+                    @click.stop
+                  >
                     <UBadge color="primary" variant="outline">
-                      {{ task.currentPlan.title || `Plan v${task.latestPlanVersion}` }}
+                      {{ task.currentPlan.title || `Workflow v${task.latestPlanVersion}` }}
                     </UBadge>
                   </NuxtLink>
                   <UBadge v-else color="neutral" variant="outline">
-                    No plan yet
+                    No workflow yet
                   </UBadge>
                 </div>
               </div>
@@ -193,7 +198,22 @@ async function onRunStarted() {
               <p class="text-sm font-medium text-highlighted">
                 Latest completed output
               </p>
-              <ArtifactPreview :artifact="task.latest_output_artifact" compact />
+              <div class="flex flex-wrap items-center gap-2">
+                <NuxtLink :to="`/artifacts/${task.latest_output_artifact.id}`" class="text-sm text-primary hover:underline">
+                  {{ task.latest_output_artifact.title }}
+                </NuxtLink>
+                <UBadge color="neutral" variant="soft" size="xs">
+                  {{ task.latest_output_artifact.type }}
+                </UBadge>
+              </div>
+              <ArtifactPreview
+                :artifact="task.latest_output_artifact"
+                compact
+                surface="plain"
+                :show-header="false"
+                :show-footer="false"
+                :show-actions="false"
+              />
             </div>
 
             <div class="grid gap-3 text-sm text-toned sm:grid-cols-2 lg:grid-cols-3">
@@ -207,29 +227,29 @@ async function onRunStarted() {
                 <p class="font-medium text-highlighted">
                   Latest run
                 </p>
-                <p>{{ task.latestRun ? `${task.latestRun.status} · ${formatRelativeTime(task.latestRun.started_at)}` : 'No runs yet' }}</p>
+                <p>{{ task.latestRun ? `${task.latestRun.status} · ${formatRelativeTime(task.latestRun.started_at)}` : 'No activity yet' }}</p>
               </div>
               <div>
                 <p class="font-medium text-highlighted">
-                  Next run
+                  Next schedule
                 </p>
                 <p>{{ formatDateTime(task.primaryJob?.next_run_at) }}</p>
               </div>
               <div>
                 <p class="font-medium text-highlighted">
-                  Plans
+                  Workflows
                 </p>
                 <p>{{ formatRelativeCount(task.planCount, 'version') }}</p>
               </div>
               <div>
                 <p class="font-medium text-highlighted">
-                  Runs
+                  Activity
                 </p>
-                <p>{{ formatRelativeCount(task.runCount, 'run') }}</p>
+                <p>{{ formatRelativeCount(task.runCount, 'activity item', 'activity items') }}</p>
               </div>
               <div>
                 <p class="font-medium text-highlighted">
-                  Last job
+                  Latest schedule
                 </p>
                 <p>{{ task.primaryJob?.status || 'Not scheduled' }}</p>
               </div>

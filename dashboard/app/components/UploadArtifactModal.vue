@@ -56,7 +56,7 @@ async function submit() {
     open.value = false
     resetForm()
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'Failed to create artifact.'
+    errorMessage.value = error instanceof Error ? error.message : 'Failed to create document.'
   } finally {
     pending.value = false
   }
@@ -64,13 +64,27 @@ async function submit() {
 </script>
 
 <template>
-  <UModal v-model:open="open" title="Upload artifact" description="Add a document, dataset, or any text content to the artifact library.">
-    <UButton icon="i-lucide-upload" color="neutral" variant="soft" @click="open = true">
+  <UModal
+    v-model:open="open"
+    title="Upload document"
+    description="Add a document, dataset, or any text content to the document library."
+  >
+    <UButton
+      icon="i-lucide-upload"
+      color="neutral"
+      variant="soft"
+      @click="open = true"
+    >
       Upload
     </UButton>
 
     <template #body>
-      <UForm :schema="artifactSchema" :state="form" class="space-y-4" @submit="submit">
+      <UForm
+        :schema="artifactSchema"
+        :state="form"
+        class="space-y-4"
+        @submit="submit"
+      >
         <UAlert
           v-if="errorMessage"
           color="error"
@@ -83,7 +97,12 @@ async function submit() {
         </UFormField>
 
         <UFormField name="type" label="Type" required>
-          <USelect v-model="form.type" :items="typeOptions" value-key="value" class="w-full" />
+          <USelect
+            v-model="form.type"
+            :items="typeOptions"
+            value-key="value"
+            class="w-full"
+          />
         </UFormField>
 
         <UFormField name="content" label="Content" required>
@@ -103,8 +122,13 @@ async function submit() {
         <UButton color="neutral" variant="ghost" @click="open = false">
           Cancel
         </UButton>
-        <UButton icon="i-lucide-upload" :loading="pending" :disabled="!form.title.trim() || !form.content.trim()" @click="submit">
-          Upload artifact
+        <UButton
+          icon="i-lucide-upload"
+          :loading="pending"
+          :disabled="!form.title.trim() || !form.content.trim()"
+          @click="submit"
+        >
+          Upload document
         </UButton>
       </div>
     </template>

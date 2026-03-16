@@ -5,10 +5,12 @@ const props = withDefaults(defineProps<{
   content?: string | null
   format?: ContentFormat
   mono?: boolean
+  surface?: 'subtle' | 'plain'
 }>(), {
   content: '',
   format: 'markdown',
-  mono: false
+  mono: false,
+  surface: 'subtle'
 })
 
 const renderedContent = computed(() => {
@@ -38,6 +40,9 @@ const renderedContent = computed(() => {
 })
 
 const editorContentClass = computed(() => props.mono ? 'font-mono text-sm' : 'text-sm')
+const editorBaseClass = computed(() => props.surface === 'plain'
+  ? 'min-h-0 bg-transparent !px-0 !py-0'
+  : 'min-h-0 rounded-xl bg-elevated/40 !px-6 !py-6')
 </script>
 
 <template>
@@ -50,13 +55,13 @@ const editorContentClass = computed(() => props.mono ? 'font-mono text-sm' : 'te
       :mention="false"
       :ui="{
         root: 'w-full',
-        base: 'min-h-0 rounded-xl border border-default bg-elevated/40',
+        base: editorBaseClass,
         content: editorContentClass
       }"
     />
 
     <template #fallback>
-      <div class="rounded-xl border border-default bg-elevated/40 p-4 text-sm text-muted">
+      <div :class="props.surface === 'plain' ? 'text-sm text-muted' : 'rounded-xl bg-elevated/40 p-4 text-sm text-muted'">
         Loading content...
       </div>
     </template>

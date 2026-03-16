@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "nuxt build",
-    "predev": "kill-port 3000 8288 8289 50052 50053",
+    "predev": "node scripts/kill-dev-ports.mjs",
     "dev": "concurrently --kill-others-on-fail --names \"nuxt,inngest\" --prefix-colors \"blue.bold,magenta.bold\" \"npm:dev:nuxt\" \"npm:dev:inngest\"",
     "dev:nuxt": "NODE_OPTIONS=--max-old-space-size=4096 nuxt dev --port 3000",
     "dev:inngest": "npx --yes --ignore-scripts=false inngest-cli@latest dev -u http://localhost:3000/api/inngest",

@@ -5,11 +5,12 @@ const { pendingReviewCount } = useDashboard()
 
 const links = [
   { id: 'home', label: 'Home', icon: 'i-lucide-house', to: '/' },
-  { id: 'plans', label: 'Plans', icon: 'i-lucide-workflow', to: '/plans' },
+  { id: 'reviews', label: 'Reviews', icon: 'i-lucide-message-circle-warning', to: '/reviews' },
   { id: 'tasks', label: 'Tasks', icon: 'i-lucide-list-checks', to: '/tasks' },
-  { id: 'artifacts', label: 'Artifacts', icon: 'i-lucide-file-text', to: '/artifacts' },
-  { id: 'runs', label: 'Runs', icon: 'i-lucide-play-circle', to: '/runs' },
-  { id: 'reviews', label: 'Reviews', icon: 'i-lucide-message-circle-warning', to: '/reviews' }
+  { id: 'plans', label: 'Workflows', icon: 'i-lucide-workflow', to: '/plans' },
+  { id: 'jobs', label: 'Schedules', icon: 'i-lucide-clock-3', to: '/jobs' },
+  { id: 'artifacts', label: 'Documents', icon: 'i-lucide-file-text', to: '/artifacts' },
+  { id: 'runs', label: 'Activity', icon: 'i-lucide-play-circle', to: '/runs' }
 ] as const
 
 function isActiveLink(path: string) {

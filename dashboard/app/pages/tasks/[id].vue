@@ -44,10 +44,13 @@ const taskArtifactIds = computed(() => {
   return Array.isArray(ids) ? ids : []
 })
 
-const { data: inputArtifacts } = useLazyFetch<ArtifactRecord[]>('/api/artifacts', {
-  default: () => [],
-  transform: (all: ArtifactRecord[]) => all.filter(a => taskArtifactIds.value.includes(a.id)),
-  watch: [taskArtifactIds]
+const inputArtifactQuery = computed(() => taskArtifactIds.value.length
+  ? { ids: taskArtifactIds.value.join(',') }
+  : {})
+
+const { data: inputArtifacts } = await useFetch<ArtifactRecord[]>('/api/artifacts', {
+  query: inputArtifactQuery,
+  default: () => []
 })
 
 const activePlan = computed(() => {
@@ -56,7 +59,6 @@ const activePlan = computed(() => {
   return plans[0] ?? null
 })
 
-const plans = computed(() => [...(task.value?.plans || [])].sort((a, b) => b.version - a.version))
 const runs = computed(() => [...(task.value?.runs || [])].sort((a, b) => {
   const aTime = a.started_at ? new Date(a.started_at).getTime() : 0
   const bTime = b.started_at ? new Date(b.started_at).getTime() : 0
@@ -262,7 +264,22 @@ async function updateTaskStatus(nextStatus: TaskRecord['status']) {
             </p>
           </div>
 
-          <ArtifactPreview :artifact="task.latest_output_artifact" />
+          <div class="flex flex-wrap items-center gap-2">
+            <NuxtLink :to="`/artifacts/${task.latest_output_artifact.id}`" class="text-sm text-primary hover:underline">
+              {{ task.latest_output_artifact.title }}
+            </NuxtLink>
+            <UBadge :color="artifactTypeColorMap[task.latest_output_artifact.type]" variant="soft" size="xs">
+              {{ task.latest_output_artifact.type }}
+            </UBadge>
+          </div>
+
+          <ArtifactPreview
+            :artifact="task.latest_output_artifact"
+            surface="plain"
+            :show-header="false"
+            :show-footer="false"
+            :show-actions="false"
+          />
         </div>
       </UCard>
 
@@ -331,7 +348,7 @@ async function updateTaskStatus(nextStatus: TaskRecord['status']) {
               <div
                 v-for="job in jobs"
                 :key="job.id"
-                class="rounded-xl border border-default p-4"
+                class="rounded-xl bg-elevated/35 p-4"
               >
                 <div class="flex flex-wrap items-center gap-2">
                   <UBadge :color="jobStatusColorMap[job.status]" variant="soft">
@@ -464,12 +481,12 @@ async function updateTaskStatus(nextStatus: TaskRecord['status']) {
             icon="i-lucide-play-circle"
           />
 
-          <div v-else class="space-y-3">
+          <div v-else class="space-y-1 rounded-2xl bg-elevated/25 p-1.5">
             <NuxtLink
               v-for="run in runs.slice(0, 8)"
               :key="run.id"
               :to="`/runs/${run.id}`"
-              class="block rounded-xl border border-default p-4 transition hover:border-primary/50 hover:bg-elevated/60"
+              class="block rounded-xl px-4 py-3 transition hover:bg-elevated/70"
             >
               <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div class="space-y-1">

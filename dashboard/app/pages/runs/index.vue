@@ -20,15 +20,15 @@ const visibleRuns = computed(() => (data.value || []).filter(run =>
 </script>
 
 <template>
-  <DashboardPage title="Runs">
+  <DashboardPage title="Activity">
     <div class="space-y-6">
       <div class="flex items-center justify-between gap-3">
         <div>
           <h2 class="text-base font-semibold text-highlighted">
-            Run history
+            Activity history
           </h2>
           <p class="mt-1 text-sm text-muted">
-            Filter completed and in-flight executions, then jump into the run inspector for the detailed graph.
+            Follow recent work as it moves from in progress to review and completion.
           </p>
         </div>
 
@@ -60,15 +60,26 @@ const visibleRuns = computed(() => (data.value || []).filter(run =>
         v-if="error"
         color="error"
         variant="soft"
-        title="Could not load runs"
+        title="Could not load activity"
         :description="error.message"
       />
 
+      <div v-else-if="status === 'pending'" class="space-y-3">
+        <div
+          v-for="index in 4"
+          :key="index"
+          class="h-28 animate-pulse rounded-xl border border-default bg-elevated/40"
+        />
+      </div>
+
       <PageEmptyState
-        v-else-if="!visibleRuns.length && status !== 'pending'"
-        title="No runs in this view"
-        description="Change the status filter or trigger a task to create a new run."
+        v-else-if="!visibleRuns.length"
+        title="No activity in this view"
+        description="Change the status filter or run a task to create your first activity."
         icon="i-lucide-play-circle"
+        action-label="Create a task"
+        action-to="/tasks/new"
+        action-icon="i-lucide-plus"
       />
 
       <div v-else class="space-y-3">
@@ -88,7 +99,7 @@ const visibleRuns = computed(() => (data.value || []).filter(run =>
               </p>
               <p class="text-sm text-dimmed">
                 {{ formatRelativeTime(run.started_at || run.completed_at) }}
-                · {{ run.plans?.version ? `Plan v${run.plans.version}` : 'No plan version attached' }}
+                · {{ run.plans?.version ? `Workflow v${run.plans.version}` : 'No workflow version attached' }}
                 · {{ formatDuration(run.started_at, run.completed_at) }}
               </p>
             </div>

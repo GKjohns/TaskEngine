@@ -35,7 +35,7 @@ const csvHeaders = computed(() => csvRows.value[0] ? Object.keys(csvRows.value[0
 </script>
 
 <template>
-  <DashboardPage :title="data?.title || `Artifact ${artifactId}`">
+  <DashboardPage :title="data?.title || `Document ${artifactId}`">
     <div class="space-y-6">
       <div class="flex items-center justify-between gap-3">
         <div class="flex flex-wrap items-center gap-2">
@@ -76,7 +76,7 @@ const csvHeaders = computed(() => csvRows.value[0] ? Object.keys(csvRows.value[0
         v-if="error"
         color="error"
         variant="soft"
-        title="Could not load artifact"
+        title="Could not load document"
         :description="error.message"
       />
 
@@ -91,8 +91,8 @@ const csvHeaders = computed(() => csvRows.value[0] ? Object.keys(csvRows.value[0
             </p>
             <p>Created {{ formatDateTime(data.created_at) }}</p>
             <p>{{ data.storage_path ? `Storage path: ${data.storage_path}` : 'Stored inline in the database' }}</p>
-            <p>{{ data.created_by_run_id ? `Run: ${data.created_by_run_id}` : 'No run recorded' }}</p>
-            <p>{{ data.created_by_node_id ? `Node run: ${data.created_by_node_id}` : 'No node run recorded' }}</p>
+            <p>{{ data.created_by_run_id ? `Created during activity ${data.created_by_run_id}` : 'No activity recorded' }}</p>
+            <p>{{ data.created_by_node_id ? `Created by step run ${data.created_by_node_id}` : 'No step run recorded' }}</p>
           </div>
         </UCard>
 
@@ -146,7 +146,7 @@ const csvHeaders = computed(() => csvRows.value[0] ? Object.keys(csvRows.value[0
             />
 
             <p v-else class="text-sm text-muted">
-              This artifact was stored in Supabase Storage. Use the download action to open the signed URL.
+              This document was stored in Supabase Storage. Use the download action to open the signed URL.
             </p>
           </div>
         </UCard>

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import type { ArtifactRecord } from '../../shared/types/task-engine'
-import { artifactTypeColorMap, formatRelativeTime, parseCsvRows, truncateText } from '../utils/taskEngine'
+import { artifactTypeColorMap, formatRelativeTime } from '../utils/taskEngine'
 
 type ReviewResolution = 'approved' | 'rejected'
-type ReviewResolvePayload = { id: string, status: ReviewResolution }
+type ReviewResolvePayload = { id: string, status: ReviewResolution, comments?: string | null }
 
 const props = withDefaults(defineProps<{
   review: {
@@ -24,63 +24,34 @@ const emit = defineEmits<{
   resolve: [payload: ReviewResolvePayload]
 }>()
 
-const artifactPreview = computed(() => {
-  const artifact = props.review.output_artifact
+const router = useRouter()
+const isRejecting = ref(false)
+const rejectComment = ref('')
 
-  if (!artifact) {
-    return 'No document preview is available yet.'
-  }
-
-  if (!artifact.content?.trim()) {
-    return artifact.storage_path
-      ? 'This document is stored in Supabase Storage. Open the full view to inspect it.'
-      : 'No inline preview is available for this document yet.'
-  }
-
-  if (artifact.type === 'json') {
-    try {
-      const parsed = JSON.parse(artifact.content)
-
-      if (Array.isArray(parsed)) {
-        return `JSON array with ${parsed.length} item${parsed.length === 1 ? '' : 's'}.`
-      }
-
-      if (parsed && typeof parsed === 'object') {
-        const keyCount = Object.keys(parsed).length
-        return `JSON document with ${keyCount} top-level field${keyCount === 1 ? '' : 's'}.`
-      }
-    } catch {
-      return truncateText(artifact.content.replace(/\s+/g, ' ').trim(), 180)
-    }
-  }
-
-  if (artifact.type === 'csv') {
-    const rows = parseCsvRows(artifact.content)
-    const headers = Object.keys(rows[0] || {}).filter(key => key !== '_row')
-
-    if (!rows.length) {
-      return 'CSV document with headers but no data rows.'
-    }
-
-    return `CSV document with ${rows.length} row${rows.length === 1 ? '' : 's'} and columns ${headers.slice(0, 4).join(', ')}.`
-  }
-
-  const lines = artifact.content
-    .split(/\r?\n/)
-    .map(line => line.trim())
-    .filter(Boolean)
-    .slice(0, 3)
-
-  return lines.join('\n') || truncateText(artifact.content.replace(/\s+/g, ' ').trim(), 180)
+watch(() => props.review.id, () => {
+  cancelReject()
 })
+
+function cancelReject() {
+  isRejecting.value = false
+  rejectComment.value = ''
+}
+
+function openFullReview() {
+  router.push(`/runs/${props.review.run_id}`)
+}
 </script>
 
 <template>
-  <div class="rounded-xl border border-warning/30 bg-warning/5 p-3.5">
+  <article
+    class="rounded-2xl bg-warning/5 p-3.5 sm:p-4"
+    tabindex="0"
+    @keydown.enter.prevent="openFullReview"
+  >
     <div class="flex items-start gap-3">
       <UIcon name="i-lucide-message-circle-warning" class="mt-0.5 size-4 shrink-0 text-[var(--color-warning-500)]" />
       <div class="min-w-0 flex-1 space-y-2">
-        <div class="flex items-baseline justify-between gap-2">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
           <p class="truncate text-sm font-medium text-highlighted">
             {{ review.task_title }}
           </p>
@@ -90,7 +61,7 @@ const artifactPreview = computed(() => {
           {{ review.review_message || 'A document is ready for your review.' }}
         </p>
 
-        <div v-if="review.output_artifact" class="rounded-lg border border-default bg-default/80 p-2.5">
+        <div v-if="review.output_artifact" class="space-y-2">
           <div class="flex items-center gap-2">
             <UIcon name="i-lucide-file-text" class="size-3.5 shrink-0 text-muted" />
             <p class="min-w-0 flex-1 truncate text-sm text-highlighted">
@@ -104,14 +75,22 @@ const artifactPreview = computed(() => {
               {{ review.output_artifact.type }}
             </UBadge>
           </div>
-          <pre class="mt-1.5 line-clamp-3 whitespace-pre-wrap break-words text-xs leading-5 text-dimmed">{{ artifactPreview }}</pre>
+          <ArtifactPreview
+            :artifact="{ ...review.output_artifact, created_at: review.created_at, task_title: review.task_title }"
+            compact
+            surface="plain"
+            :show-header="false"
+            :show-footer="false"
+            :show-actions="false"
+          />
         </div>
 
-        <div class="flex items-center gap-2">
+        <div v-if="!isRejecting" class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           <UButton
             color="success"
-            size="xs"
+            size="sm"
             :loading="pendingStatus === 'approved'"
+            :aria-label="`Approve review for ${review.task_title}`"
             @click="emit('resolve', { id: review.id, status: 'approved' })"
           >
             Approve
@@ -119,22 +98,60 @@ const artifactPreview = computed(() => {
           <UButton
             color="error"
             variant="soft"
-            size="xs"
+            size="sm"
             :loading="pendingStatus === 'rejected'"
-            @click="emit('resolve', { id: review.id, status: 'rejected' })"
+            :aria-label="`Reject review for ${review.task_title}`"
+            @click="isRejecting = true"
           >
             Reject
           </UButton>
           <UButton
             color="neutral"
             variant="ghost"
-            size="xs"
-            :to="`/runs/${review.run_id}`"
+            size="sm"
+            :aria-label="`Open full review for ${review.task_title}`"
+            @click="openFullReview"
           >
-            View full
+            Review in full
           </UButton>
+        </div>
+
+        <div
+          v-else
+          class="space-y-3 rounded-lg border border-error/30 bg-error/5 p-3"
+        >
+          <UFormField label="Reject comment (optional)">
+            <UTextarea
+              v-model="rejectComment"
+              class="w-full"
+              :rows="3"
+              autoresize
+              placeholder="Add context for why this should be revised or stopped."
+            />
+          </UFormField>
+
+          <div class="flex items-center gap-2">
+            <UButton
+              color="error"
+              size="sm"
+              :loading="pendingStatus === 'rejected'"
+              :aria-label="`Confirm rejection for ${review.task_title}`"
+              @click="emit('resolve', { id: review.id, status: 'rejected', comments: rejectComment || null })"
+            >
+              Confirm reject
+            </UButton>
+            <UButton
+              color="neutral"
+              variant="ghost"
+              size="sm"
+              :disabled="Boolean(pendingStatus)"
+              @click="cancelReject"
+            >
+              Cancel
+            </UButton>
+          </div>
         </div>
       </div>
     </div>
-  </div>
+  </article>
 </template>

@@ -18,16 +18,18 @@ const pending = ref(false)
 const errorMessage = ref('')
 const selectedArtifactIds = ref<string[]>([])
 
-const { data: artifacts, status: loadingStatus, refresh: loadArtifacts } = useLazyFetch<ArtifactRecord[]>('/api/artifacts', {
-  default: () => [],
-  immediate: false
+const { data: artifacts, status: loadingStatus } = await useFetch<ArtifactRecord[]>('/api/artifacts', {
+  default: () => []
 })
+
+watch(() => props.taskArtifactIds, (artifactIds) => {
+  selectedArtifactIds.value = artifactIds?.length ? [...artifactIds] : []
+}, { immediate: true })
 
 watch(open, (isOpen) => {
   if (isOpen) {
     selectedArtifactIds.value = props.taskArtifactIds?.length ? [...props.taskArtifactIds] : []
     errorMessage.value = ''
-    loadArtifacts()
   }
 })
 
@@ -64,8 +66,18 @@ async function startRun() {
 </script>
 
 <template>
-    <UModal v-model:open="open" title="Run task" description="Review the input artifacts for this run. These are pre-selected from the task configuration.">
-    <UButton color="primary" icon="i-lucide-play" :disabled="disabled" :size="compact ? 'sm' : 'md'" @click="open = true">
+  <UModal
+    v-model:open="open"
+    title="Run task"
+    description="Review the input documents for this run. These are pre-selected from the task configuration."
+  >
+    <UButton
+      color="primary"
+      icon="i-lucide-play"
+      :disabled="disabled"
+      :size="compact ? 'sm' : 'md'"
+      @click="open = true"
+    >
       Run now
     </UButton>
 
@@ -84,7 +96,7 @@ async function startRun() {
 
         <div v-else-if="artifacts?.length" class="space-y-2">
           <p class="text-sm font-medium text-highlighted">
-            Select input artifacts
+            Select input documents
           </p>
 
           <div class="max-h-80 space-y-1.5 overflow-y-auto">
@@ -98,7 +110,8 @@ async function startRun() {
                 : 'border-default hover:border-primary/40 hover:bg-elevated/60'"
               @click="toggleArtifact(artifact.id)"
             >
-              <div class="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded border transition"
+              <div
+                class="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded border transition"
                 :class="selectedArtifactIds.includes(artifact.id)
                   ? 'border-primary bg-primary text-white'
                   : 'border-default'"
@@ -124,12 +137,12 @@ async function startRun() {
 
         <div v-else class="rounded-lg border border-default bg-elevated/40 p-4 text-center">
           <p class="text-sm text-muted">
-            No artifacts in the library yet. The plan will run without pre-selected inputs.
+            No documents are available yet. This task will run without pre-selected inputs.
           </p>
         </div>
 
         <div v-if="selectedArtifactIds.length" class="rounded-lg bg-primary/5 px-3 py-2 text-sm text-primary">
-          {{ selectedArtifactIds.length }} artifact{{ selectedArtifactIds.length !== 1 ? 's' : '' }} selected as input
+          {{ selectedArtifactIds.length }} document{{ selectedArtifactIds.length !== 1 ? 's' : '' }} selected as input
         </div>
       </div>
     </template>
@@ -139,8 +152,12 @@ async function startRun() {
         <UButton color="neutral" variant="ghost" @click="open = false">
           Cancel
         </UButton>
-        <UButton icon="i-lucide-play" :loading="pending" @click="startRun">
-          {{ selectedArtifactIds.length ? `Run with ${selectedArtifactIds.length} artifact${selectedArtifactIds.length !== 1 ? 's' : ''}` : 'Run without selection' }}
+        <UButton
+          icon="i-lucide-play"
+          :loading="pending"
+          @click="startRun"
+        >
+          {{ selectedArtifactIds.length ? `Run with ${selectedArtifactIds.length} document${selectedArtifactIds.length !== 1 ? 's' : ''}` : 'Run without selection' }}
         </UButton>
       </div>
     </template>

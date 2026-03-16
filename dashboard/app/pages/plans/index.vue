@@ -13,12 +13,12 @@ const plans = computed(() => (data.value || []).map((plan) => {
 </script>
 
 <template>
-  <DashboardPage title="Plans">
+  <DashboardPage title="Workflows">
     <div class="space-y-6">
       <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 class="text-base font-semibold text-highlighted">
-            Plan library
+            Workflow library
           </h2>
           <p class="mt-1 text-sm text-muted">
             Reusable workflow templates. Create once, attach to any task.
@@ -36,7 +36,7 @@ const plans = computed(() => (data.value || []).map((plan) => {
             Refresh
           </UButton>
           <UButton to="/plans/new" icon="i-lucide-plus">
-            New plan
+            New workflow
           </UButton>
         </div>
       </div>
@@ -45,15 +45,26 @@ const plans = computed(() => (data.value || []).map((plan) => {
         v-if="error"
         color="error"
         variant="soft"
-        title="Could not load plans"
+        title="Could not load workflows"
         :description="error.message"
       />
 
+      <div v-else-if="status === 'pending'" class="grid gap-4 xl:grid-cols-2">
+        <div
+          v-for="index in 4"
+          :key="index"
+          class="h-56 animate-pulse rounded-xl border border-default bg-elevated/40"
+        />
+      </div>
+
       <PageEmptyState
-        v-else-if="!plans.length && status !== 'pending'"
-        title="No plans yet"
-        description="Create a reusable plan from a prompt, then attach it to tasks."
+        v-else-if="!plans.length"
+        title="No workflows yet"
+        description="Create a reusable workflow from a prompt, then attach it to tasks."
         icon="i-lucide-workflow"
+        action-label="Create a workflow"
+        action-to="/plans/new"
+        action-icon="i-lucide-plus"
       />
 
       <div v-else class="grid gap-4 xl:grid-cols-2">
@@ -73,7 +84,7 @@ const plans = computed(() => (data.value || []).map((plan) => {
                     v{{ plan.version }}
                   </UBadge>
                   <UBadge color="primary" variant="soft">
-                    {{ plan.nodeCount }} {{ plan.nodeCount === 1 ? 'node' : 'nodes' }}
+                    {{ plan.nodeCount }} {{ plan.nodeCount === 1 ? 'step' : 'steps' }}
                   </UBadge>
                   <UBadge v-if="plan.task_id" color="info" variant="soft">
                     Linked to task

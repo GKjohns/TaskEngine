@@ -17,15 +17,8 @@ interface TaskWithPlan extends TaskRecord {
   plans?: PlanRecord[]
 }
 
-const { data: tasks, status: loadingStatus, refresh: loadTasks } = useLazyFetch<TaskWithPlan[]>('/api/tasks', {
-  default: () => [],
-  immediate: false
-})
-
-watch(open, (isOpen) => {
-  if (isOpen) {
-    loadTasks()
-  }
+const { data: tasks, status: loadingStatus } = await useFetch<TaskWithPlan[]>('/api/tasks', {
+  default: () => []
 })
 
 const activeTasks = computed(() =>
@@ -65,7 +58,7 @@ async function startRun() {
 </script>
 
 <template>
-  <UModal v-model:open="open" title="Run a task on this artifact" description="Pick a task to execute with this artifact as input.">
+  <UModal v-model:open="open" title="Run a task on this document" description="Pick a task to execute with this document as input.">
     <UButton icon="i-lucide-play" variant="soft" @click="open = true">
       Run a task
     </UButton>
@@ -94,7 +87,8 @@ async function startRun() {
               : 'border-default hover:border-primary/40 hover:bg-elevated/60'"
             @click="selectedTaskId = task.id"
           >
-            <div class="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border transition"
+            <div
+              class="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border transition"
               :class="selectedTaskId === task.id
                 ? 'border-primary bg-primary'
                 : 'border-default'"
@@ -119,7 +113,7 @@ async function startRun() {
 
         <div v-else class="rounded-lg border border-default bg-elevated/40 p-4 text-center">
           <p class="text-sm text-muted">
-            No active tasks with plans available.
+            No active tasks with workflows available.
           </p>
           <UButton class="mt-2" size="sm" to="/tasks/new">
             Create a task
@@ -133,7 +127,12 @@ async function startRun() {
         <UButton color="neutral" variant="ghost" @click="open = false">
           Cancel
         </UButton>
-        <UButton icon="i-lucide-play" :loading="pending" :disabled="!selectedTaskId" @click="startRun">
+        <UButton
+          icon="i-lucide-play"
+          :loading="pending"
+          :disabled="!selectedTaskId"
+          @click="startRun"
+        >
           Run task
         </UButton>
       </div>

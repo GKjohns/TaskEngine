@@ -67,6 +67,7 @@ interface DashboardArtifact {
   task_id: string | null
   created_at: string
   created_by_run_id: string | null
+  created_by_node_id?: string | null
 }
 
 interface DashboardReviewItem {
@@ -229,7 +230,7 @@ export default defineEventHandler(async () => {
   if (artifactIds.length) {
     const { data, error } = await client
       .from('artifacts')
-      .select('id, type, title, content, description, storage_path, task_id, created_at, created_by_run_id')
+      .select('id, type, title, content, description, storage_path, task_id, created_at, created_by_run_id, created_by_node_id')
       .in('id', artifactIds)
 
     if (error) throw createErrorFromMessage(error.message)

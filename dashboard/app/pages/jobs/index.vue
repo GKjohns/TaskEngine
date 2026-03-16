@@ -126,15 +126,15 @@ async function handleJobAction(job: JobListItem, action: JobAction['key']) {
 </script>
 
 <template>
-  <DashboardPage title="Jobs">
+  <DashboardPage title="Schedules">
     <div class="space-y-6">
       <div class="flex items-center justify-between gap-3">
         <div>
           <h2 class="text-base font-semibold text-highlighted">
-            Job manager
+            Schedule manager
           </h2>
           <p class="mt-1 text-sm text-muted">
-            Track scheduled, waiting, failed, and paused jobs, then trigger or recover them from one view.
+            See what is scheduled next, what is paused, and what needs to be restarted.
           </p>
         </div>
 
@@ -166,22 +166,33 @@ async function handleJobAction(job: JobListItem, action: JobAction['key']) {
         v-if="error"
         color="error"
         variant="soft"
-        title="Could not load jobs"
+        title="Could not load schedules"
         :description="error.message"
       />
       <UAlert
         v-else-if="actionError"
         color="error"
         variant="soft"
-        title="Job update failed"
+        title="Schedule update failed"
         :description="actionError"
       />
 
+      <div v-else-if="status === 'pending'" class="space-y-3">
+        <div
+          v-for="index in 4"
+          :key="index"
+          class="h-44 animate-pulse rounded-xl border border-default bg-elevated/40"
+        />
+      </div>
+
       <PageEmptyState
-        v-else-if="!visibleJobs.length && status !== 'pending'"
-        title="No jobs in this view"
-        description="Create a task or change the status filter to see more jobs."
+        v-else-if="!visibleJobs.length"
+        title="No schedules in this view"
+        description="Create a task or change the status filter to see more scheduled work."
         icon="i-lucide-clock"
+        action-label="Create a task"
+        action-to="/tasks/new"
+        action-icon="i-lucide-plus"
       />
 
       <div v-else class="space-y-3">

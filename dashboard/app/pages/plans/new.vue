@@ -72,14 +72,14 @@ async function savePlan() {
 </script>
 
 <template>
-  <DashboardPage title="New Plan">
+  <DashboardPage title="New Workflow">
     <div class="mx-auto max-w-4xl space-y-6">
       <div>
         <h2 class="text-base font-semibold text-highlighted">
           Design a reusable workflow
         </h2>
         <p class="mt-1 text-sm text-muted">
-          Describe what the plan should do. The AI will generate an execution graph you can review, save, and attach to tasks later.
+          Describe what the workflow should do. The AI will generate an execution graph you can review, save, and attach to tasks later.
         </p>
       </div>
 
@@ -87,7 +87,7 @@ async function savePlan() {
         v-if="errorMessage"
         color="error"
         variant="soft"
-        title="Plan creation failed"
+        title="Workflow creation failed"
         :description="errorMessage"
       />
 
@@ -103,7 +103,7 @@ async function savePlan() {
               name="title"
               label="Title"
               required
-              description="A short name for this plan in the library."
+              description="A short name for this workflow in the library."
             >
               <UInput
                 id="plan-title"
@@ -132,7 +132,7 @@ async function savePlan() {
             <UFormField
               name="description"
               label="Description"
-              description="Optional short description for the plan library."
+              description="Optional short description for the workflow library."
             >
               <UInput
                 id="plan-description"
@@ -153,7 +153,7 @@ async function savePlan() {
               :loading="pending"
               :disabled="!canPreview"
             >
-              Generate plan preview
+              Generate workflow preview
             </UButton>
           </div>
         </UForm>
@@ -164,7 +164,7 @@ async function savePlan() {
           <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 class="text-base font-semibold text-highlighted">
-                Generated plan
+                Generated workflow
               </h3>
               <p class="mt-1 text-sm text-muted">
                 Review the workflow graph before saving it to the library.
@@ -181,7 +181,7 @@ async function savePlan() {
                 Re-generate
               </UButton>
               <UButton icon="i-lucide-check" :loading="saving" @click="savePlan">
-                Save plan
+                Save workflow
               </UButton>
             </div>
           </div>
@@ -190,7 +190,7 @@ async function savePlan() {
             v-if="validationErrors.length"
             color="warning"
             variant="soft"
-            title="Plan validation warnings"
+            title="Workflow validation warnings"
             :description="validationErrors.join(' ')"
           />
 

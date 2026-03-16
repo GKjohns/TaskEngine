@@ -199,7 +199,7 @@ function selectPlan(plan: PlanRecord) {
           Create a task
         </h2>
         <p class="mt-1 text-sm text-muted">
-          Pick an existing plan from the library or generate a new one from a prompt.
+          Pick an existing workflow from the library or generate a new one from a prompt.
         </p>
       </div>
 
@@ -215,10 +215,10 @@ function selectPlan(plan: PlanRecord) {
         <div class="space-y-4">
           <div>
             <p class="text-sm font-medium text-highlighted">
-              Input artifacts
+              Input documents
             </p>
             <p class="mt-1 text-xs text-muted">
-              Select the data this task should process. These artifacts are fed directly into the plan's first steps.
+              Select the data this task should process. These documents are fed directly into the workflow's first steps.
             </p>
           </div>
 
@@ -237,7 +237,8 @@ function selectPlan(plan: PlanRecord) {
                 : 'border-default hover:border-primary/40 hover:bg-elevated/60'"
               @click="toggleArtifact(artifact.id)"
             >
-              <div class="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded border transition"
+              <div
+                class="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded border transition"
                 :class="selectedArtifactIds.includes(artifact.id)
                   ? 'border-primary bg-primary text-white'
                   : 'border-default'"
@@ -262,12 +263,12 @@ function selectPlan(plan: PlanRecord) {
 
           <div v-else class="rounded-lg border border-default bg-elevated/40 p-4 text-center">
             <p class="text-sm text-muted">
-              No artifacts available. You can upload artifacts from the artifacts page.
+              No documents are available yet. You can upload one from the documents page.
             </p>
           </div>
 
           <div v-if="selectedArtifactIds.length" class="rounded-lg bg-primary/5 px-3 py-2 text-sm text-primary">
-            {{ selectedArtifactIds.length }} artifact{{ selectedArtifactIds.length !== 1 ? 's' : '' }} selected as input
+            {{ selectedArtifactIds.length }} document{{ selectedArtifactIds.length !== 1 ? 's' : '' }} selected as input
           </div>
         </div>
       </UCard>
@@ -276,10 +277,10 @@ function selectPlan(plan: PlanRecord) {
         <div class="space-y-6">
           <div>
             <p class="text-sm font-medium text-highlighted">
-              Plan source
+              Workflow source
             </p>
             <p class="mt-1 text-xs text-muted">
-              Choose whether to attach an existing plan or create a fresh one from a prompt.
+              Choose whether to attach an existing workflow or create a fresh one from a prompt.
             </p>
             <div class="mt-3 grid gap-3 md:grid-cols-2">
               <button
@@ -293,11 +294,11 @@ function selectPlan(plan: PlanRecord) {
                 <div class="flex items-center gap-2">
                   <UIcon name="i-lucide-library" class="size-4 text-primary" />
                   <p class="font-medium text-highlighted">
-                    Use existing plan
+                    Use existing workflow
                   </p>
                 </div>
                 <p class="mt-2 text-sm text-muted">
-                  Pick a workflow from the plan library.
+                  Pick a workflow from the workflow library.
                 </p>
               </button>
               <button
@@ -311,7 +312,7 @@ function selectPlan(plan: PlanRecord) {
                 <div class="flex items-center gap-2">
                   <UIcon name="i-lucide-wand-sparkles" class="size-4 text-primary" />
                   <p class="font-medium text-highlighted">
-                    Generate new plan
+                    Generate new workflow
                   </p>
                 </div>
                 <p class="mt-2 text-sm text-muted">
@@ -323,7 +324,7 @@ function selectPlan(plan: PlanRecord) {
 
           <div v-if="planSource === 'existing'" class="space-y-3">
             <p class="text-sm font-medium text-highlighted">
-              Select a plan
+              Select a workflow
             </p>
 
             <div v-if="plansLoadStatus === 'pending'" class="flex items-center justify-center py-6">
@@ -341,7 +342,8 @@ function selectPlan(plan: PlanRecord) {
                   : 'border-default hover:border-primary/40 hover:bg-elevated/60'"
                 @click="selectPlan(p)"
               >
-                <div class="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border transition"
+                <div
+                  class="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border transition"
                   :class="selectedPlanId === p.id
                     ? 'border-primary bg-primary'
                     : 'border-default'"
@@ -357,7 +359,7 @@ function selectPlan(plan: PlanRecord) {
                       v{{ p.version }}
                     </UBadge>
                     <UBadge color="primary" variant="soft" size="xs">
-                      {{ p.plan_json?.nodes?.length ?? 0 }} nodes
+                      {{ p.plan_json?.nodes?.length ?? 0 }} steps
                     </UBadge>
                   </div>
                   <p v-if="p.description" class="mt-0.5 truncate text-xs text-muted">
@@ -369,10 +371,10 @@ function selectPlan(plan: PlanRecord) {
 
             <div v-else class="rounded-lg border border-default bg-elevated/40 p-4 text-center">
               <p class="text-sm text-muted">
-                No plans in the library yet.
+                No workflows are in the library yet.
               </p>
               <UButton class="mt-2" size="sm" to="/plans/new">
-                Create a plan
+                Create a workflow
               </UButton>
             </div>
 

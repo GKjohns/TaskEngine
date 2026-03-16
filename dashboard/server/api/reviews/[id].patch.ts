@@ -12,7 +12,9 @@ interface ResolvedReviewRecord extends ReviewRecord {
 
 const resolveReviewSchema = z.object({
   status: z.enum(['approved', 'rejected', 'edited']),
-  comments: z.string().trim().nullable().optional()
+  comments: z.string().trim().nullable().optional(),
+  artifact_id: z.string().uuid().nullable().optional(),
+  artifact_content: z.string().nullable().optional()
 })
 
 export default defineEventHandler(async (event) => {
@@ -27,6 +29,23 @@ export default defineEventHandler(async (event) => {
 
   const body = await readValidatedBody(event, resolveReviewSchema)
   const client = createServiceClient()
+
+  if (body.status === 'edited' && body.artifact_id && body.artifact_content !== undefined) {
+    const { error: artifactError } = await client
+      .from('artifacts')
+      .update({
+        content: body.artifact_content,
+        storage_path: null
+      })
+      .eq('id', body.artifact_id)
+
+    if (artifactError) {
+      throw createError({
+        statusCode: 500,
+        statusMessage: artifactError.message
+      })
+    }
+  }
 
   const { data, error } = await client
     .from('reviews')
