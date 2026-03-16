@@ -1,4 +1,20 @@
+import type { Database } from '../../../shared/types/database'
 import { createServiceClient } from '../../utils/supabase'
+
+type TaskListRow = Database['public']['Tables']['tasks']['Row'] & {
+  current_plan: {
+    id: string
+    title: string
+    version: number
+  } | null
+  plans: Array<{
+    id: string
+    version: number
+    created_at: string
+  }>
+  runs: Array<Pick<Database['public']['Tables']['runs']['Row'], 'id' | 'status' | 'started_at' | 'completed_at'>>
+  jobs: Array<Pick<Database['public']['Tables']['jobs']['Row'], 'id' | 'job_type' | 'status' | 'next_run_at' | 'last_run_at' | 'last_error'>>
+}
 
 export default defineEventHandler(async () => {
   const client = createServiceClient()
@@ -19,10 +35,11 @@ export default defineEventHandler(async () => {
     return data
   }
 
+  const tasks = data as TaskListRow[]
   const latestCompletedRunByTask = new Map<string, string>()
 
-  for (const task of data) {
-    const latestCompletedRun = (task.runs || [])
+  for (const task of tasks) {
+    const latestCompletedRun = task.runs
       .filter(run => run.status === 'completed')
       .sort((a, b) => {
         const aTime = new Date(a.completed_at || a.started_at || 0).getTime()
@@ -38,13 +55,13 @@ export default defineEventHandler(async () => {
   const completedRunIds = [...new Set(latestCompletedRunByTask.values())]
 
   if (!completedRunIds.length) {
-    return data.map(task => ({
+    return tasks.map(task => ({
       ...task,
       latest_output_artifact: null
     }))
   }
 
-  const { data: artifacts, error: artifactsError } = await client
+  const { data: artifactsData, error: artifactsError } = await client
     .from('artifacts')
     .select('*')
     .in('created_by_run_id', completedRunIds)
@@ -57,15 +74,16 @@ export default defineEventHandler(async () => {
     })
   }
 
-  const artifactByRunId = new Map<string, typeof artifacts[number]>()
+  const artifacts = (artifactsData || []) as Database['public']['Tables']['artifacts']['Row'][]
+  const artifactByRunId = new Map<string, Database['public']['Tables']['artifacts']['Row']>()
 
-  for (const artifact of artifacts || []) {
+  for (const artifact of artifacts) {
     if (artifact.created_by_run_id && !artifactByRunId.has(artifact.created_by_run_id)) {
       artifactByRunId.set(artifact.created_by_run_id, artifact)
     }
   }
 
-  return data.map(task => ({
+  return tasks.map(task => ({
     ...task,
     latest_output_artifact: artifactByRunId.get(latestCompletedRunByTask.get(task.id) || '') || null
   }))

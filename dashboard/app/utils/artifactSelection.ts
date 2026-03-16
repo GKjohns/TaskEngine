@@ -139,7 +139,7 @@ export function suggestArtifactIds(input: {
   }
 
   return [...input.artifacts]
-    .map((artifact) => ({
+    .map(artifact => ({
       id: artifact.id,
       score: getArtifactScore(artifact, normalizeText(query), queryTokens)
     }))

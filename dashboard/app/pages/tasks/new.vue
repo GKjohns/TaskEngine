@@ -266,10 +266,20 @@ function selectPlan(plan: PlanRecord) {
             :description="`We found ${suggestedArtifactIds.length} likely match${suggestedArtifactIds.length !== 1 ? 'es' : ''} based on the task prompt and workflow.`"
           >
             <template #actions>
-              <UButton size="xs" color="info" variant="soft" @click="applySuggestedArtifacts">
+              <UButton
+                size="xs"
+                color="info"
+                variant="soft"
+                @click="applySuggestedArtifacts"
+              >
                 Use suggested
               </UButton>
-              <UButton size="xs" color="neutral" variant="ghost" @click="clearArtifactSelection">
+              <UButton
+                size="xs"
+                color="neutral"
+                variant="ghost"
+                @click="clearArtifactSelection"
+              >
                 Clear
               </UButton>
             </template>

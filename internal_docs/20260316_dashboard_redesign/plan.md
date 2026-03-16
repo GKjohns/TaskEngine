@@ -3,7 +3,7 @@
 **Reframe the dashboard around the user's work, not the system's internals.**
 Last updated: 2026-03-16
 
-> **Status: Planning**
+> **Status: Complete**
 > Branch: `dashboard-redesign`
 
 ---
@@ -86,6 +86,8 @@ Artifacts are the actual work product. Whenever the dashboard references an arti
 
 ### Sprint 1 — Dashboard Information Architecture
 
+> **Status: Complete**
+
 **Goal**: Restructure the home page so it answers "what needs attention?" and "what happened?" using language a non-technical user understands.
 
 #### 1.1 Attention Center (replaces status hero + attention items)
@@ -165,6 +167,8 @@ The `/api/dashboard` endpoint needs to return richer data to support the new lay
 
 ### Sprint 2 — Review Experience & Artifact Presence
 
+> **Status: Complete**
+
 **Goal**: Make the review flow fast and trustworthy, and give artifacts more visibility throughout the app.
 
 #### 2.1 Inline Review Resolution on Dashboard
@@ -222,6 +226,8 @@ The artifacts page (`/artifacts`) gets treated more like a document library:
 ---
 
 ### Sprint 3 — Navigation, Language, and Polish
+
+> **Status: Complete**
 
 **Goal**: Humanize the entire app's vocabulary, improve navigation clarity, and add the finishing touches that make it feel trustworthy to non-technical users.
 

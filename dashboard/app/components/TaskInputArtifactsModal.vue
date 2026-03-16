@@ -110,7 +110,12 @@ async function saveDocuments() {
           :description="`We found ${suggestedArtifactIds.length} likely match${suggestedArtifactIds.length !== 1 ? 'es' : ''} based on the task prompt.`"
         >
           <template #actions>
-            <UButton size="xs" color="info" variant="soft" @click="applySuggestions">
+            <UButton
+              size="xs"
+              color="info"
+              variant="soft"
+              @click="applySuggestions"
+            >
               Use suggested
             </UButton>
           </template>

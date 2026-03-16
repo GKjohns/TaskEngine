@@ -63,7 +63,9 @@ export default defineEventHandler(async (event) => {
     .select()
     .single()
 
-  if (planError || !plan) {
+  const createdPlan = plan as Database['public']['Tables']['plans']['Row'] | null
+
+  if (planError || !createdPlan) {
     throw createError({
       statusCode: 500,
       statusMessage: planError?.message || 'Failed to create plan'
@@ -72,11 +74,11 @@ export default defineEventHandler(async (event) => {
 
   await client
     .from('tasks')
-    .update({ plan_id: plan.id })
+    .update({ plan_id: createdPlan.id })
     .eq('id', id)
 
   return {
-    plan,
+    plan: createdPlan,
     validation_errors: validationErrors
   }
 })

@@ -28,7 +28,7 @@ export function firstSentence(text: string, maxLength = 140): string {
 
 export function describeClassifyResult(outputText: string, artifactTitle?: string): string {
   try {
-    const parsed = JSON.parse(outputText) as { label?: string; confidence?: number }
+    const parsed = JSON.parse(outputText) as { label?: string, confidence?: number }
     const subject = artifactTitle ? `"${artifactTitle}"` : 'Input'
     const confidence = typeof parsed.confidence === 'number'
       ? ` (${Math.round(parsed.confidence * 100)}% confidence)`
@@ -41,7 +41,7 @@ export function describeClassifyResult(outputText: string, artifactTitle?: strin
 
 export function describeExtractResult(outputText: string, artifactTitle?: string): string {
   try {
-    const parsed = JSON.parse(outputText) as { items?: unknown[]; summary?: string }
+    const parsed = JSON.parse(outputText) as { items?: unknown[], summary?: string }
     const count = Array.isArray(parsed.items) ? parsed.items.length : 0
     const source = artifactTitle ? ` from "${artifactTitle}"` : ''
     if (parsed.summary) {

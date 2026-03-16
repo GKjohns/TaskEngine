@@ -26,15 +26,17 @@ export default defineEventHandler(async (event) => {
   const client = createServiceClient()
 
   let planId = body.plan_id || null
-  let plan = null
+  let plan: Database['public']['Tables']['plans']['Row'] | null = null
   let validationErrors: string[] = []
 
   if (planId) {
-    const { data: existing, error: existingError } = await client
+    const { data: existingData, error: existingError } = await client
       .from('plans')
       .select('*')
       .eq('id', planId)
       .single()
+
+    const existing = existingData as Database['public']['Tables']['plans']['Row'] | null
 
     if (existingError || !existing) {
       throw createError({
@@ -48,7 +50,7 @@ export default defineEventHandler(async (event) => {
     const planJson = (body.plan_json as Plan | undefined) || await generatePlan(useOpenAI(), body.prompt)
     validationErrors = validatePlan(planJson)
 
-    const { data: newPlan, error: planError } = await client
+    const { data: newPlanData, error: planError } = await client
       .from('plans')
       .insert({
         title: body.title,
@@ -58,6 +60,8 @@ export default defineEventHandler(async (event) => {
       })
       .select()
       .single()
+
+    const newPlan = newPlanData as Database['public']['Tables']['plans']['Row'] | null
 
     if (planError || !newPlan) {
       throw createError({
@@ -92,7 +96,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  if (!plan.task_id) {
+  if (!plan?.task_id) {
     await client
       .from('plans')
       .update({ task_id: task.id })

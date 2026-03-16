@@ -1,4 +1,24 @@
+import type { Database } from '../../../shared/types/database'
+import type { Plan } from '../../../shared/types/task-engine'
 import { createServiceClient } from '../../utils/supabase'
+
+type TaskDetailRow = Database['public']['Tables']['tasks']['Row'] & {
+  current_plan: {
+    id: string
+    title: string
+    plan_json: Plan
+    version: number
+    created_at: string
+  } | null
+  plans: Array<{
+    id: string
+    plan_json: Plan
+    version: number
+    created_at: string
+  }>
+  runs: Array<Pick<Database['public']['Tables']['runs']['Row'], 'id' | 'status' | 'started_at' | 'completed_at'>>
+  jobs: Array<Pick<Database['public']['Tables']['jobs']['Row'], 'id' | 'job_type' | 'status' | 'next_run_at' | 'last_run_at' | 'last_error'>>
+}
 
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
@@ -25,7 +45,9 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const latestCompletedRun = (data.runs || [])
+  const task = data as TaskDetailRow
+
+  const latestCompletedRun = task.runs
     .filter(run => run.status === 'completed')
     .sort((a, b) => {
       const aTime = new Date(a.completed_at || a.started_at || 0).getTime()
@@ -35,7 +57,7 @@ export default defineEventHandler(async (event) => {
 
   if (!latestCompletedRun?.id) {
     return {
-      ...data,
+      ...task,
       latest_output_artifact: null
     }
   }
@@ -55,7 +77,7 @@ export default defineEventHandler(async (event) => {
   }
 
   return {
-    ...data,
+    ...task,
     latest_output_artifact: artifacts?.[0] || null
   }
 })

@@ -113,7 +113,7 @@ export const llmSummarize: NodeExecutor = async (node, context) => runLlmNode(no
   reasoning: { effort: 'medium' },
   artifactType: 'markdown',
   title: 'Summary',
-  describe: (output) => describeSummarizeResult(output)
+  describe: output => describeSummarizeResult(output)
 }))
 
 export const llmClassify: NodeExecutor = async (node, context) => runLlmNode(node, context, () => ({
@@ -186,5 +186,5 @@ export const llmTransform: NodeExecutor = async (node, context) => runLlmNode(no
   reasoning: { effort: 'medium' },
   artifactType: 'markdown',
   title: 'Transformation',
-  describe: (output) => describeTransformResult(output)
+  describe: output => describeTransformResult(output)
 }))

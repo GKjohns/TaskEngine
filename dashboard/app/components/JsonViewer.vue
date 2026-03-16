@@ -78,7 +78,9 @@ async function copyToClipboard() {
   try {
     await navigator.clipboard.writeText(prettyJson.value)
     copied.value = true
-    setTimeout(() => { copied.value = false }, 2000)
+    setTimeout(() => {
+      copied.value = false
+    }, 2000)
   } catch {
     // Clipboard API not available
   }

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { Plan } from '../../../shared/types/task-engine'
 import { validatePlan } from '../../utils/graphUtils'
 import { readValidatedBody } from '../../utils/http'
 import { useOpenAI } from '../../utils/openai'
@@ -18,7 +19,7 @@ export default defineEventHandler(async (event) => {
   const body = await readValidatedBody(event, createPlanSchema)
   const client = createServiceClient()
 
-  const planJson = body.plan_json || await generatePlan(useOpenAI(), body.prompt)
+  const planJson = (body.plan_json as Plan | undefined) || await generatePlan(useOpenAI(), body.prompt)
   const validationErrors = validatePlan(planJson)
 
   const nodeCount = planJson.nodes?.length ?? 0

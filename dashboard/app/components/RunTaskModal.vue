@@ -118,7 +118,12 @@ async function startRun() {
           :description="`We pre-selected ${suggestedArtifactIds.length} likely match${suggestedArtifactIds.length !== 1 ? 'es' : ''} based on the task prompt.`"
         >
           <template #actions>
-            <UButton size="xs" color="info" variant="soft" @click="applySuggestions">
+            <UButton
+              size="xs"
+              color="info"
+              variant="soft"
+              @click="applySuggestions"
+            >
               Re-apply suggestions
             </UButton>
           </template>

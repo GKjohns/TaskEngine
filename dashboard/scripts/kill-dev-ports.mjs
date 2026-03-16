@@ -16,7 +16,7 @@ function getListeningPids(port) {
 
     return stdout
       .split('\n')
-      .map((value) => value.trim())
+      .map(value => value.trim())
       .filter(Boolean)
   } catch (error) {
     if (error.status === 1) {
