@@ -3,7 +3,7 @@
 **A conversational interface for TaskEngine, with OpenClaw-inspired memory and the ability to take action.**
 Last updated: 2026-03-16
 
-> **Status: Planning**
+> **Status: In Progress**
 
 ---
 
@@ -77,7 +77,7 @@ POST /api/chat/sessions/[id]
        │
        ├─ Persist assistant message(s) to chat_messages
        │
-       └─ Stream response back via UIMessageStream
+       └─ Stream response back via SSE (ChatEvent JSON lines)
               │
               ▼
        Client renders incrementally
@@ -283,6 +283,8 @@ The identity section is static. Everything else is composed per-request from the
 
 ### Sprint 1 — Database & API Foundation
 
+**Status**: Done
+
 **Goal**: Set up the chat data model and core API routes. No UI yet — verify with curl.
 
 **Duration**: 1 day
@@ -340,46 +342,92 @@ curl -X POST http://localhost:3000/api/chat/memories \
 
 ### Sprint 2 — Chat Agent Core
 
-**Goal**: Build the server-side chat agent with tool use, streaming, and memory context loading. The agent can answer questions about the system and take actions.
+**Status**: Done
+
+**Goal**: Build the server-side chat agent with tool use, streaming, and memory context loading. The agent can answer questions about the system and take actions. Designed for conversational latency, not task-execution thoroughness.
 
 **Duration**: 2 days
+
+#### Design decision: lightweight chat loop, not heavy agent loop
+
+The existing `agentLoop.ts` (used by `agentTransform` and `agentCode` nodes) is built for durable task execution: high reasoning effort, unlimited tool iterations, no streaming, and a model (`gpt-5.4`) chosen for depth over speed. Chat has different requirements:
+
+| Concern | Task execution loop | Chat loop |
+|---|---|---|
+| Latency | Seconds to minutes are fine | First token under 1s matters |
+| Tool calls | Unbounded, 10-15 iterations | Capped at 3 per turn |
+| Streaming | Not needed (results stored) | Required for conversational feel |
+| Model | `gpt-5.4` (heavy reasoning) | `gpt-5.4-mini` (fast, strong tool use) |
+| Reasoning | `effort: 'high'` | No explicit reasoning param |
+| Error handling | Retry and continue | Fail gracefully, tell the user |
+| Tone | Execution log | Conversational |
+
+We share the same tool *implementations* (same DB queries, same Supabase client, same run dispatch utilities), but wrap them in a purpose-built chat interface instead of reusing the task agent loop. This keeps the code path predictable: most chat turns are a single model call with zero tool use, some turns use 1-2 tools, and very rarely does a turn hit the 3-tool cap.
 
 #### 2.1 Context assembly (`server/utils/chatContext.ts`)
 
 Function that builds the full context for a chat request:
 
 ```typescript
-async function assembleChatContext(sessionId: string): Promise<{
+interface ChatContext {
   systemPrompt: string
-  messages: Message[]
-}> {
-  // 1. Load long-term memories
+  messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>
+  tokenEstimate: number
+}
+
+async function assembleChatContext(
+  supabase: SupabaseClient,
+  sessionId: string
+): Promise<ChatContext> {
+  // 1. Load all memories for the user
   // 2. Load last 3 session summaries (excluding current session)
   // 3. Load current session's non-compacted messages
-  // 4. Compose system prompt with memories + summaries
-  // 5. Return system prompt + message history
+  // 4. Compose system prompt from template with memories + summaries injected
+  // 5. Estimate tokens (character count / 4)
+  // 6. Return system prompt, message array, and token estimate
 }
 ```
 
-The system prompt is built from a template string with the dynamic sections filled in. The memories are formatted as a bulleted list. Session summaries are formatted as dated paragraphs.
+The system prompt template lives in the same file as a constant string. Dynamic sections are interpolated:
+- `{date}` — today's date
+- `{memories}` — bulleted list of all memory entries, grouped by category
+- `{recent_sessions}` — last 3 session summaries as dated paragraphs
 
-#### 2.2 Tool implementations (`server/utils/chatTools/`)
+Memories and summaries go in the system prompt (not as messages) so they don't inflate the conversation history and are clearly distinguished from actual dialogue.
 
-Each tool is a module that exports an OpenAI-compatible tool definition and an execution function.
+#### 2.2 Chat tool interface and implementations (`server/utils/chatTools/`)
+
+Chat tools share a `ChatTool` interface that is intentionally simpler than the task execution `AgentTool`. The task execution tools need `NodeExecutionContext` (runId, nodeRunId, taskId, inputArtifacts). Chat tools only need a Supabase client and optional user/session info.
+
+```typescript
+interface ChatToolContext {
+  supabase: SupabaseClient<Database>
+  userId: string | null
+  sessionId: string
+}
+
+interface ChatTool {
+  name: string
+  description: string
+  parameters: Record<string, unknown>  // JSON Schema object
+  execute: (args: Record<string, unknown>, ctx: ChatToolContext) => Promise<string>
+}
+```
+
+Every tool's `execute` returns a plain string. The chat loop feeds this string back to the model as the tool result. Tools should format their output for readability (the model will summarize for the user, but concise structured output helps).
 
 ```
 server/utils/chatTools/
-├── index.ts          -- registry, exports all tools
+├── index.ts              -- registry: exports allChatTools array + toolsByName map
 ├── listTasks.ts
 ├── getTask.ts
-├── runTask.ts
-├── createTask.ts
+├── runTask.ts            -- reuses createPendingRunForTask + sendRunStartEvent
 ├── listArtifacts.ts
 ├── getArtifact.ts
 ├── listRuns.ts
 ├── getRun.ts
 ├── listReviews.ts
-├── resolveReview.ts
+├── resolveReview.ts      -- reuses same logic as PATCH /api/reviews/[id]
 ├── saveMemory.ts
 ├── listMemories.ts
 ├── updateMemory.ts
@@ -389,107 +437,155 @@ server/utils/chatTools/
 └── getDashboardSummary.ts
 ```
 
-Each tool follows this shape:
+Each file exports a single `ChatTool`. The registry (`index.ts`) collects them into an array for the chat loop and a name-keyed map for execution dispatch.
+
+#### 2.3 Chat streaming loop (`server/utils/chatLoop.ts`)
+
+The core chat orchestrator. Unlike the task execution `agentLoop.ts`, this is built around streaming and bounded tool use.
 
 ```typescript
-export const listTasksTool = {
-  type: 'function' as const,
-  name: 'list_tasks',
-  description: 'List tasks, optionally filtered by status or trigger type.',
-  parameters: {
-    type: 'object',
-    properties: {
-      status: { type: 'string', enum: ['active', 'paused', 'archived'] },
-      trigger_type: { type: 'string', enum: ['manual', 'scheduled', 'heartbeat'] }
-    }
-  },
-  execute: async (args: any, supabase: SupabaseClient) => {
-    // Query tasks table, return formatted result
-  }
+interface ChatLoopConfig {
+  openai: OpenAI
+  model: string                        // default: 'gpt-5.4-mini'
+  systemPrompt: string
+  messages: ChatContext['messages']
+  tools: ChatTool[]
+  toolContext: ChatToolContext
+  maxToolRounds: number                // default: 3
 }
+
+interface ChatEvent {
+  type: 'text-delta' | 'tool-call' | 'tool-result' | 'error' | 'done'
+  // text-delta: { delta: string }
+  // tool-call: { name: string, arguments: string }
+  // tool-result: { name: string, output: string }
+  // error: { message: string }
+  // done: { fullText: string }
+}
+
+async function* runChatLoop(config: ChatLoopConfig): AsyncGenerator<ChatEvent>
 ```
 
-The `runTask` and `createTask` tools reuse existing server utilities (`createPendingRunForTask`, `sendRunStartEvent`, plan generation from `planGenerator.ts`).
+Flow:
 
-The `resolveReview` tool calls the same logic as `PATCH /api/reviews/[id]`.
+1. Build the OpenAI Responses API input array from system prompt + message history
+2. Call `openai.responses.create({ stream: true, model, input, tools, ... })`
+3. Iterate the stream:
+   - On text deltas → yield `text-delta` events immediately (this is what makes it feel fast)
+   - On `function_call` output items → yield `tool-call` event, then execute the tool
+4. After all function calls in one response are processed, yield `tool-result` events
+5. If there were tool calls and `toolRound < maxToolRounds`, make another streaming call with the tool results appended to the input, then repeat from step 3
+6. If there were no tool calls (pure text response), yield `done` with the full assembled text
+7. If `maxToolRounds` is reached, yield `done` with whatever text the model produced last
 
-#### 2.3 Chat streaming endpoint (`server/api/chat/sessions/[id].post.ts`)
+Key differences from `agentLoop.ts`:
+- **Streaming**: yields events as they arrive instead of waiting for complete responses
+- **Bounded**: hard cap on tool rounds, not just max iterations
+- **No reasoning param**: uses the model's default behavior, which is faster
+- **No `previous_response_id` chaining**: builds the input array explicitly so we control what the model sees
+- **Generator-based**: the endpoint can pipe events to SSE as they're yielded
 
-The main chat endpoint. Receives a user message, streams the agent response.
+#### 2.4 Chat streaming endpoint (`server/api/chat/sessions/[id].post.ts`)
+
+The main chat endpoint. Receives a user message, streams the response via SSE.
+
+```typescript
+// Request body
+{ message: string }
+
+// Response: SSE stream (text/event-stream)
+// Each event is a JSON line:
+//   data: {"type":"text-delta","delta":"Hello"}
+//   data: {"type":"tool-call","name":"list_tasks","arguments":"{}"}
+//   data: {"type":"tool-result","name":"list_tasks","output":"Found 3 tasks..."}
+//   data: {"type":"text-delta","delta":" here are your tasks:"}
+//   data: {"type":"title","title":"Task Overview"}
+//   data: {"type":"done","fullText":"Hello, here are your tasks: ..."}
+```
 
 Flow:
-1. Validate request body (message text, optional attachments)
-2. Insert user message into `chat_messages`
-3. Assemble context (system prompt + memories + summaries + history)
-4. Call OpenAI with streaming and tools enabled
-5. Handle tool calls in a loop (execute tool, feed result back)
-6. Stream response tokens to the client
-7. On completion, persist assistant message to `chat_messages`
-8. If this is the first message, generate a session title and update `chat_sessions`
+1. Validate request body (message string via Zod)
+2. Verify session exists and belongs to the user
+3. Insert user message into `chat_messages` (role: 'user')
+4. Assemble context via `assembleChatContext`
+5. If token estimate exceeds compaction threshold, run compaction first
+6. Open SSE stream via `createEventStream(event)` (same pattern as run streaming)
+7. Start `runChatLoop` generator
+8. For each yielded `ChatEvent`, serialize and push to the SSE stream
+9. On `done`, persist the full assistant message to `chat_messages`
+10. If this is the session's first message exchange (no prior assistant messages), fire title generation in the background and push a `title` event when it resolves
+11. Close the stream
 
-Uses the OpenAI Responses API (consistent with existing `server/utils/openai.ts`). The streaming format follows the Vercel AI SDK's `UIMessageStream` pattern from the Nuxt UI chat template — this gives us compatibility with the `@ai-sdk/vue` `Chat` class on the frontend.
+Uses Nitro's `createEventStream` which is already used by `server/api/runs/[id]/stream.get.ts`. No new streaming dependencies needed.
 
-Token counting is approximate (character count / 4). When the assembled context exceeds ~80K tokens, trigger compaction before processing the new message.
+The SSE event format is intentionally simple JSON lines. Sprint 3's frontend will parse these directly rather than depending on `@ai-sdk/vue`, keeping the dependency surface small. If we want AI SDK compatibility later, we can add an adapter without changing the backend.
 
-#### 2.4 Title generation
+#### 2.5 Title generation
 
-After the first assistant response, generate a short title for the session:
+After the first assistant response, generate a short title in the background (non-blocking):
 
 ```typescript
 const titleResult = await openai.responses.create({
-  model: 'gpt-4.1-nano',
+  model: 'gpt-5.4-nano',
   input: `Generate a 3-6 word title for this conversation:\n\nUser: ${userMessage}\nAssistant: ${assistantResponse}`,
 })
 await supabase.from('chat_sessions').update({ title: titleResult.output_text }).eq('id', sessionId)
 ```
 
-Send the title back through the stream as a custom data event so the client can update the sidebar without refetching.
+Push the title through the SSE stream as a `title` event before the final `done` event. The client updates the sidebar/header without refetching.
 
-#### 2.5 Compaction logic (`server/utils/chatCompaction.ts`)
+#### 2.6 Compaction logic (`server/utils/chatCompaction.ts`)
 
-When the context exceeds the token threshold:
+Triggered when `assembleChatContext` reports a token estimate above the compaction threshold. Runs synchronously before the chat loop starts (the user sees a brief delay on that one turn, which is acceptable since it only triggers after very long conversations).
 
-1. **Pre-compaction memory flush**: Send a hidden system message asking the agent to save any durable information to long-term memory. Process tool calls silently (don't stream to the client).
-2. **Generate summary**: Summarize the messages that will be compacted into a single paragraph.
-3. **Store summary**: Insert into `session_summaries`.
-4. **Mark messages**: Set `is_compacted = true` on the older messages.
-5. **Continue**: The next context assembly will use the summary instead of the raw messages.
+Steps:
+1. **Summarize**: Call `gpt-5.4-mini` with the messages that will be compacted, asking for a 2-3 paragraph summary of the conversation so far
+2. **Store summary**: Insert into `session_summaries` with message count and token estimate
+3. **Mark messages**: Set `is_compacted = true` on the older messages
+4. **Re-assemble**: The subsequent `assembleChatContext` call will use the summary instead of the raw messages
+
+The pre-compaction memory flush from the original plan (asking the agent to save memories before compacting) adds another full model round-trip that blocks the user. Instead, we rely on the agent's natural behavior during conversation: the system prompt instructs it to save important information to memory proactively. If something was worth remembering, the agent should have already saved it by the time compaction triggers. This is simpler and avoids a confusing hidden agent pass.
 
 Configuration:
-- Context limit: ~80K tokens (leaves room for the response)
-- Compaction threshold: when total context exceeds 60K tokens
-- Pre-flush prompt: "This session is approaching its context limit. Review the conversation and save any important facts, preferences, or decisions to long-term memory using the save_memory tool. Reply with NO_REPLY when done."
+- Compaction threshold: 60K estimated tokens
+- Messages to keep uncompacted: the most recent 10 messages (ensures the model always has recent conversational context even after compaction)
 
-#### 2.6 Verification
+#### 2.7 Verification
 
 ```bash
 # Send a message and get a streamed response
-curl -N -X POST http://localhost:3000/api/chat/sessions/{id} \
+curl -N -X POST http://localhost:3000/api/chat/sessions/{session_id} \
   -H 'Content-Type: application/json' \
   -d '{"message": "What tasks do I have?"}'
-# → Streamed response listing the user's tasks
+# → SSE stream with text-delta events listing the user's tasks
 
 # Ask the agent to take action
-curl -N -X POST http://localhost:3000/api/chat/sessions/{id} \
+curl -N -X POST http://localhost:3000/api/chat/sessions/{session_id} \
   -H 'Content-Type: application/json' \
   -d '{"message": "Run the weekly safety brief"}'
-# → Agent uses run_task tool, confirms the run was started
+# → tool-call event (run_task), tool-result event, then text-delta confirming run started
 
 # Test memory
-curl -N -X POST http://localhost:3000/api/chat/sessions/{id} \
+curl -N -X POST http://localhost:3000/api/chat/sessions/{session_id} \
   -H 'Content-Type: application/json' \
   -d '{"message": "Remember that I prefer markdown tables for data summaries"}'
-# → Agent uses save_memory tool, confirms the preference was saved
+# → tool-call event (save_memory), tool-result event, then text-delta confirming saved
+
+# Verify title generation (after first exchange)
+curl http://localhost:3000/api/chat/sessions/{session_id}
+# → { id, title: "Task Overview", messages: [...] }
 ```
 
 #### Definition of Done
 
 - Context assembly loads memories, summaries, and messages correctly
-- All tools execute against the real database
-- Streaming works end-to-end (tool calls, text, title generation)
+- All chat tools execute against the real database via the `ChatTool` interface
+- Streaming works end-to-end via SSE (text deltas, tool calls, tool results, title)
+- Tool use is bounded at 3 rounds per turn
 - Memory save/read cycle works across sessions
-- Compaction logic handles long conversations gracefully
+- Compaction triggers at threshold and keeps conversations functional
 - Agent can list tasks, start runs, search artifacts, and manage reviews through conversation
+- First token latency is noticeably faster than a `gpt-5.4` with `reasoning: high` call
 
 ---
 
@@ -525,7 +621,7 @@ const useGlobalChat = () => {
 }
 ```
 
-The chat composable handles session lifecycle. The actual message state and streaming are handled by `@ai-sdk/vue`'s `Chat` class inside the chat component (following the Nuxt UI template pattern).
+The chat composable handles session lifecycle. The actual message state and streaming are handled by a lightweight SSE consumer inside the chat component that parses the `ChatEvent` JSON lines from Sprint 2's endpoint. No external AI SDK dependency needed.
 
 #### 3.2 Chat slideover component (`components/ChatSlideover.vue`)
 
@@ -559,7 +655,7 @@ A focused input component:
 - `ChatMessageAssistant.vue` — Assistant bubble with markdown rendering, copy button
 - `ChatToolCall.vue` — Compact tool call indicator (pending → resolved states)
 
-These are intentionally simple. The Nuxt UI chat template uses the AI SDK's native `UIMessage.parts` format, which handles text, tool calls, and tool results as a unified message structure. We follow the same pattern.
+These are intentionally simple. Each message is rendered from the `ChatEvent` stream format defined in Sprint 2. Text deltas accumulate into the assistant message body. Tool calls and results render as inline status indicators within the message flow.
 
 #### 3.5 Layout integration
 
@@ -797,15 +893,9 @@ dashboard/app/
 
 ### New npm packages
 
-| Package | Purpose |
-|---|---|
-| `@ai-sdk/vue` | Vue integration for streaming chat (Chat class, DefaultChatTransport) |
-| `ai` | Vercel AI SDK core (UIMessageStream, streamText) |
-| `@ai-sdk/openai` | OpenAI provider for AI SDK |
+No new npm packages required.
 
-The Nuxt UI chat template uses these exact packages. They provide the streaming protocol, message management, and Vue reactivity bindings that would be tedious to build from scratch.
-
-Alternatively, if we want to stay closer to the existing pattern (direct OpenAI SDK + custom SSE), we can skip these and use the same approach as `useRunStream.ts` with a custom composable. The tradeoff is more custom code but fewer dependencies. **Recommendation**: Use the AI SDK. The streaming protocol handling alone saves significant work, and the Chat class handles optimistic updates, error recovery, and message state management.
+The chat backend uses the existing `openai` SDK (already in `package.json`) for model calls and Nitro's built-in `createEventStream` for SSE streaming (already used by `server/api/runs/[id]/stream.get.ts`). The frontend will consume the SSE stream with a lightweight custom composable, following the same pattern as `useRunStream.ts`. This keeps the dependency surface small and avoids coupling to the Vercel AI SDK's streaming protocol.
 
 ### No new environment variables
 
@@ -829,7 +919,7 @@ The chat agent uses the same OpenAI API key and Supabase credentials already con
 
 1. **AI SDK vs. custom streaming**: The Nuxt UI chat template uses the Vercel AI SDK for streaming. Our existing run streaming uses custom SSE via `useRunStream`. Should we standardize on the AI SDK for chat, or build a custom solution that's more consistent with existing patterns? (Recommendation: AI SDK for chat, keep custom SSE for runs since they have different streaming semantics.)
 
-2. **Model selection**: Should the chat agent use the same model as task execution (`gpt-4.1`), or a faster/cheaper model for conversational responses? Recommendation: `gpt-4.1-mini` for most interactions, with the option to escalate to `gpt-4.1` for complex tool-use chains.
+2. **Model selection**: Should the chat agent use the same model as task execution (`gpt-5.4`), or a faster/cheaper model for conversational responses? Recommendation: `gpt-5.4-mini` for most interactions, with the option to escalate to `gpt-5.4` for complex tool-use chains.
 
 3. **Memory capacity**: How many long-term memories before we prompt consolidation? OpenClaw doesn't enforce a hard limit but relies on the agent's judgment. Recommendation: Soft cap at 30 entries, with a periodic consolidation prompt.
 
