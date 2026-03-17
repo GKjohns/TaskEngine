@@ -28,6 +28,8 @@ export type RetrieveTimeWindow = '24h' | '7d' | '30d' | 'since_last_run'
 export type RetrieveSort = 'newest' | 'oldest'
 export type HttpFetchMethod = 'GET' | 'POST'
 export type HttpFetchResponseType = 'json' | 'text' | 'html_to_text' | 'csv'
+export type ChatMessageRole = 'user' | 'assistant' | 'system' | 'tool'
+export type MemoryCategory = 'preference' | 'fact' | 'decision' | 'workflow' | 'general'
 
 export interface RetrieveConfig {
   match: string | null
@@ -160,4 +162,42 @@ export interface ReviewRecord {
   comments: string | null
   created_at: string
   resolved_at: string | null
+}
+
+export interface ChatSessionRecord {
+  id: string
+  title: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ChatMessageRecord {
+  id: string
+  session_id: string
+  role: ChatMessageRole
+  content: string
+  tool_calls: unknown[]
+  tool_results: unknown[]
+  is_compacted: boolean
+  created_at: string
+}
+
+export interface MemoryRecord {
+  id: string
+  content: string
+  category: MemoryCategory
+  source_session_id: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface SessionSummaryRecord {
+  id: string
+  session_id: string
+  summary: string
+  message_count: number
+  token_estimate: number | null
+  created_at: string
 }

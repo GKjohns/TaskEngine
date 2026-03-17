@@ -1,7 +1,9 @@
 import type {
   ArtifactType,
+  ChatMessageRole,
   JobStatus,
   JobType,
+  MemoryCategory,
   NodeRunStatus,
   Plan,
   PlanNodeType,
@@ -12,6 +14,9 @@ import type {
 } from './task-engine'
 
 export interface Database {
+  __InternalSupabase: {
+    PostgrestVersion: '14.4'
+  }
   public: {
     Tables: {
       tasks: {
@@ -70,11 +75,11 @@ export interface Database {
           version: number
           created_by: string | null
           created_at: string
-          updated_at: string
+          updated_at: string | null
         }
         Insert: {
           id?: string
-          title: string
+          title?: string
           description?: string | null
           prompt?: string | null
           task_id?: string | null
@@ -82,7 +87,7 @@ export interface Database {
           version?: number
           created_by?: string | null
           created_at?: string
-          updated_at?: string
+          updated_at?: string | null
         }
         Update: {
           id?: string
@@ -94,7 +99,7 @@ export interface Database {
           version?: number
           created_by?: string | null
           created_at?: string
-          updated_at?: string
+          updated_at?: string | null
         }
         Relationships: []
       }
@@ -287,6 +292,120 @@ export interface Database {
           comments?: string | null
           created_at?: string
           resolved_at?: string | null
+        }
+        Relationships: []
+      }
+      chat_sessions: {
+        Row: {
+          id: string
+          title: string | null
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          title?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          title?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      chat_messages: {
+        Row: {
+          id: string
+          session_id: string
+          role: ChatMessageRole
+          content: string
+          tool_calls: unknown[]
+          tool_results: unknown[]
+          is_compacted: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          session_id: string
+          role: ChatMessageRole
+          content: string
+          tool_calls?: unknown[]
+          tool_results?: unknown[]
+          is_compacted?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          session_id?: string
+          role?: ChatMessageRole
+          content?: string
+          tool_calls?: unknown[]
+          tool_results?: unknown[]
+          is_compacted?: boolean
+          created_at?: string
+        }
+        Relationships: []
+      }
+      memories: {
+        Row: {
+          id: string
+          content: string
+          category: MemoryCategory
+          source_session_id: string | null
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          content: string
+          category?: MemoryCategory
+          source_session_id?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          content?: string
+          category?: MemoryCategory
+          source_session_id?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      session_summaries: {
+        Row: {
+          id: string
+          session_id: string
+          summary: string
+          message_count: number
+          token_estimate: number | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          session_id: string
+          summary: string
+          message_count: number
+          token_estimate?: number | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          session_id?: string
+          summary?: string
+          message_count?: number
+          token_estimate?: number | null
+          created_at?: string
         }
         Relationships: []
       }
