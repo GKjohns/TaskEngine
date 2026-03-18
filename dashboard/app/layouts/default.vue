@@ -2,6 +2,7 @@
 const route = useRoute()
 const open = ref(false)
 const { pendingReviewCount } = useDashboard()
+const { isOpen: isChatOpen, openChat } = useGlobalChat()
 
 const links = [
   { id: 'home', label: 'Home', icon: 'i-lucide-house', to: '/' },
@@ -81,5 +82,21 @@ function isActiveLink(path: string) {
     </UDashboardSidebar>
 
     <slot />
+
+    <ChatSlideover />
+
+    <div v-if="!isChatOpen" class="pointer-events-none fixed right-5 bottom-5 z-20">
+      <UTooltip text="Open chat (C)" :content="{ side: 'left' }">
+        <UButton
+          color="primary"
+          size="lg"
+          icon="i-lucide-message-square"
+          class="pointer-events-auto rounded-full shadow-lg"
+          @click="openChat"
+        >
+          Chat
+        </UButton>
+      </UTooltip>
+    </div>
   </UDashboardGroup>
 </template>

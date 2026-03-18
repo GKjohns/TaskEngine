@@ -591,6 +591,8 @@ curl http://localhost:3000/api/chat/sessions/{session_id}
 
 ### Sprint 3 — Chat Slideover UI
 
+**Status**: Done
+
 **Goal**: Build the chat slideover that's accessible from every page. Streaming messages, session switching, and basic history.
 
 **Duration**: 2 days

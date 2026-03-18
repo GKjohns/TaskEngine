@@ -15,6 +15,12 @@ export interface ChatContext {
   tokenEstimate: number
 }
 
+export interface ChatViewContext {
+  kind: 'task' | 'artifact' | 'run' | 'page'
+  label: string
+  id?: string | null
+}
+
 const MEMORY_CATEGORY_ORDER: MemoryCategory[] = ['preference', 'workflow', 'decision', 'fact', 'general']
 
 function formatTimestamp(value: string) {
@@ -80,11 +86,23 @@ function buildRecentSessionsSection(summaries: Database['public']['Tables']['ses
 function buildSystemPrompt(params: {
   memories: Database['public']['Tables']['memories']['Row'][]
   summaries: Database['public']['Tables']['session_summaries']['Row'][]
+  currentView?: ChatViewContext | null
 }) {
+  const currentViewSection = params.currentView
+    ? [
+        '[Current Page Context]',
+        params.currentView.id
+          ? `The user is currently viewing ${params.currentView.label} (id: ${params.currentView.id}). If their message seems related to that entity or page, use that context when deciding which tools to call.`
+          : `The user is currently viewing ${params.currentView.label}. If their message seems related to that entity or page, use that context when deciding which tools to call.`,
+        ''
+      ]
+    : []
+
   return [
     'You are the TaskEngine assistant. You help users manage automated tasks, review outputs, search documents, and build workflows through conversation.',
     `Today is ${formatNow()}.`,
     '',
+    ...currentViewSection,
     '[Long-Term Memory]',
     buildMemorySection(params.memories),
     '',
@@ -138,7 +156,8 @@ async function listRecentSessionIds(
 export async function assembleChatContext(
   supabase: ServiceClient,
   sessionId: string,
-  userId: string | null
+  userId: string | null,
+  currentView?: ChatViewContext | null
 ): Promise<ChatContext> {
   let memoriesQuery = supabase
     .from('memories')
@@ -199,7 +218,8 @@ export async function assembleChatContext(
 
   const systemPrompt = buildSystemPrompt({
     memories: (memoriesResult.data || []) as Database['public']['Tables']['memories']['Row'][],
-    summaries: (summariesResult.data || []) as Database['public']['Tables']['session_summaries']['Row'][]
+    summaries: (summariesResult.data || []) as Database['public']['Tables']['session_summaries']['Row'][],
+    currentView
   })
 
   return {

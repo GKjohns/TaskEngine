@@ -10,7 +10,12 @@ import { getRequestUserId } from '../../../utils/requestUser'
 import { createServiceClient } from '../../../utils/supabase'
 
 const sendMessageSchema = z.object({
-  message: z.string().trim().min(1)
+  message: z.string().trim().min(1),
+  context: z.object({
+    kind: z.enum(['task', 'artifact', 'run', 'page']),
+    label: z.string().trim().min(1).max(120),
+    id: z.string().trim().min(1).max(120).optional()
+  }).optional()
 })
 
 async function getScopedSession(
@@ -134,7 +139,7 @@ export default defineEventHandler(async (event) => {
 
   await touchSession(client, sessionId)
 
-  let context = await assembleChatContext(client, sessionId, userId)
+  let context = await assembleChatContext(client, sessionId, userId, body.context || null)
 
   if (context.tokenEstimate > CHAT_COMPACTION_THRESHOLD) {
     await compactChatSession({
@@ -143,7 +148,7 @@ export default defineEventHandler(async (event) => {
       sessionId
     })
 
-    context = await assembleChatContext(client, sessionId, userId)
+    context = await assembleChatContext(client, sessionId, userId, body.context || null)
   }
 
   const stream = createEventStream(event)
