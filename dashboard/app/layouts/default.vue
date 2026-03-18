@@ -6,6 +6,7 @@ const { isOpen: isChatOpen, openChat } = useGlobalChat()
 
 const links = [
   { id: 'home', label: 'Home', icon: 'i-lucide-house', to: '/' },
+  { id: 'chat', label: 'Chat', icon: 'i-lucide-message-square', to: '/chat' },
   { id: 'reviews', label: 'Reviews', icon: 'i-lucide-message-circle-warning', to: '/reviews' },
   { id: 'tasks', label: 'Tasks', icon: 'i-lucide-list-checks', to: '/tasks' },
   { id: 'plans', label: 'Workflows', icon: 'i-lucide-workflow', to: '/plans' },

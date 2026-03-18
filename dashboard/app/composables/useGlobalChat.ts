@@ -1,10 +1,12 @@
 import { createSharedComposable } from '@vueuse/core'
 import type { Database } from '../../shared/types/database'
 
-export type ChatSessionSummary = Pick<
+export interface ChatSessionSummary extends Pick<
   Database['public']['Tables']['chat_sessions']['Row'],
   'id' | 'title' | 'created_at' | 'updated_at'
->
+> {
+  summary?: string | null
+}
 
 type ChatMessageRow = Database['public']['Tables']['chat_messages']['Row']
 
@@ -66,6 +68,12 @@ export interface ChatUiMessage {
   error: string | null
 }
 
+export interface ChatSessionGroup {
+  key: string
+  label: string
+  sessions: ChatSessionSummary[]
+}
+
 interface ChatSessionDetail extends ChatSessionSummary {
   messages: ChatMessageRow[]
 }
@@ -82,6 +90,66 @@ function sortSessions(sessions: ChatSessionSummary[]) {
   return [...sessions].sort((a, b) => {
     return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
   })
+}
+
+function startOfDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate())
+}
+
+function getSessionGroupMeta(value: string) {
+  const sessionDate = new Date(value)
+  const today = startOfDay(new Date())
+  const targetDay = startOfDay(sessionDate)
+  const dayDiff = Math.round((today.getTime() - targetDay.getTime()) / (1000 * 60 * 60 * 24))
+
+  if (dayDiff <= 0) {
+    return { key: 'today', label: 'Today' }
+  }
+
+  if (dayDiff === 1) {
+    return { key: 'yesterday', label: 'Yesterday' }
+  }
+
+  if (dayDiff < 7) {
+    return { key: 'last-7-days', label: 'Last 7 Days' }
+  }
+
+  const monthKey = `${sessionDate.getFullYear()}-${sessionDate.getMonth()}`
+  const sameYear = sessionDate.getFullYear() === today.getFullYear()
+
+  return {
+    key: monthKey,
+    label: new Intl.DateTimeFormat('en', {
+      month: 'long',
+      year: sameYear ? undefined : 'numeric'
+    }).format(sessionDate)
+  }
+}
+
+function groupSessions(sessions: ChatSessionSummary[]) {
+  const groups: ChatSessionGroup[] = []
+  const groupIndex = new Map<string, ChatSessionGroup>()
+
+  for (const session of sortSessions(sessions)) {
+    const { key, label } = getSessionGroupMeta(session.updated_at)
+    const existingGroup = groupIndex.get(key)
+
+    if (existingGroup) {
+      existingGroup.sessions.push(session)
+      continue
+    }
+
+    const nextGroup: ChatSessionGroup = {
+      key,
+      label,
+      sessions: [session]
+    }
+
+    groupIndex.set(key, nextGroup)
+    groups.push(nextGroup)
+  }
+
+  return groups
 }
 
 function asRecord(value: unknown) {
@@ -191,6 +259,7 @@ const useSharedGlobalChat = createSharedComposable(() => {
   const currentSession = computed(() => {
     return sessions.value.find(session => session.id === currentSessionId.value) || null
   })
+  const groupedSessions = computed(() => groupSessions(sessions.value))
 
   function replaceSessions(nextSessions: ChatSessionSummary[]) {
     sessions.value = sortSessions(nextSessions)
@@ -210,6 +279,11 @@ const useSharedGlobalChat = createSharedComposable(() => {
 
   function clearMessages() {
     messages.value = []
+  }
+
+  function clearCurrentSession() {
+    currentSessionId.value = null
+    clearMessages()
   }
 
   function abortActiveStream() {
@@ -240,8 +314,8 @@ const useSharedGlobalChat = createSharedComposable(() => {
       replaceSessions(nextSessions)
       error.value = null
 
-      if (!currentSessionId.value && nextSessions[0]) {
-        await loadSession(nextSessions[0].id)
+      if (currentSessionId.value && !nextSessions.some(session => session.id === currentSessionId.value)) {
+        clearCurrentSession()
       }
 
       return true
@@ -335,6 +409,32 @@ const useSharedGlobalChat = createSharedComposable(() => {
 
   function closeChat() {
     toggle(false)
+  }
+
+  async function deleteSession(sessionId: string) {
+    if (!sessionId) {
+      return false
+    }
+
+    try {
+      await $fetch<ChatSessionSummary>(`/api/chat/sessions/${sessionId}`, {
+        method: 'DELETE'
+      })
+
+      replaceSessions(sessions.value.filter(session => session.id !== sessionId))
+
+      if (currentSessionId.value === sessionId) {
+        abortActiveStream()
+        isSending.value = false
+        clearCurrentSession()
+      }
+
+      error.value = null
+      return true
+    } catch (deleteError) {
+      error.value = deleteError instanceof Error ? deleteError.message : 'Failed to delete this chat session.'
+      return false
+    }
   }
 
   function handleToolCall(messageId: string, event: ChatToolCallEvent) {
@@ -563,6 +663,7 @@ const useSharedGlobalChat = createSharedComposable(() => {
   return {
     isOpen,
     sessions,
+    groupedSessions,
     currentSessionId,
     currentSession,
     messages,
@@ -575,6 +676,7 @@ const useSharedGlobalChat = createSharedComposable(() => {
     loadSession,
     switchSession,
     newSession,
+    deleteSession,
     sendMessage,
     toggle,
     openChat,

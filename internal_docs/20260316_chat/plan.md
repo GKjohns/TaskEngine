@@ -702,46 +702,74 @@ This context is sent as metadata with the user's message, and the system prompt 
 
 ### Sprint 4 — Full Chat Page & Session History
 
-**Goal**: Build the dedicated `/chat` page with full session history sidebar and a more spacious conversation view.
+**Status**: Done
+
+**Goal**: Build the dedicated `/chat` page as a spacious chat workspace without introducing a second always-visible sidebar inside the dashboard shell.
 
 **Duration**: 1 day
 
 #### 4.1 Chat page (`pages/chat/index.vue`)
 
-A full-page chat experience for longer conversations. Layout:
+A full-page chat experience for longer conversations. The page should prioritize the active conversation, not the archive. Since the app already has a primary dashboard sidebar, adding a pinned session sidebar on `/chat` would create a double-navigation layout and make history feel louder than the conversation itself.
+
+Layout:
 
 ```
 ┌──────────────────────────────────────────────┐
-│  Session Sidebar  │      Active Chat         │
-│                   │                          │
-│  [+ New Chat]     │  [messages...]           │
-│                   │                          │
-│  Today            │                          │
-│   ├ Safety brief  │                          │
-│   └ Compliance Q  │                          │
-│                   │                          │
-│  Yesterday        │                          │
-│   └ Task setup    │  [input area]            │
+│ Chat                       [History] [+ New] │
+│ Ask about tasks, runs, reviews, and docs.    │
+├──────────────────────────────────────────────┤
+│                                              │
+│               [messages...]                  │
+│                                              │
+│                                              │
+├──────────────────────────────────────────────┤
+│               [input area]                   │
 └──────────────────────────────────────────────┘
 ```
 
-Uses `UDashboardPanel` for the sidebar and main area (consistent with the existing dashboard layout pattern). The session sidebar groups sessions by date (Today, Yesterday, Last Week, etc.) following the Nuxt UI chat template's `useChats` grouping pattern.
+If there is an active session, the page shows the conversation immediately.
 
-#### 4.2 Session history sidebar component (`components/ChatSessionSidebar.vue`)
+If there is no active session yet, the page renders a meaningful null state instead of auto-opening the most recent conversation. The null state should include:
+- A short explanation of what chat can do
+- Primary actions: "Start new chat" and "Open history"
+- A "Recent conversations" section inline on the page, grouped by date (Today, Yesterday, Last Week, etc.)
+- Optional starter prompts for common actions
 
-- Lists all sessions grouped by date
+This keeps the first screen focused while still making history visible when it is most helpful.
+
+Use `UDashboardPanel` for the main page container if helpful, but do not add a second persistent left rail inside the existing layout.
+
+#### 4.2 Session history components
+
+Replace the dedicated full-height sidebar concept with progressive disclosure:
+
+- `ChatSessionHistoryList.vue` — shared grouped session list with search, active state, timestamps, and delete action
+- `ChatSessionHistorySlideover.vue` — on-demand history browser opened from a "History" button on the chat page
+
+Behavior:
+- Sessions are grouped by date following the Nuxt UI chat template's `useChats` grouping pattern
+- Search/filter matches titles and summaries
 - Active session is highlighted
-- Each session shows title and relative timestamp
-- Right-click or hover reveals delete action (with confirmation)
-- "New Chat" button at the top
-- Search/filter for sessions (searches titles and summaries)
+- Delete action requires confirmation
+- Selecting a session from either the null state or the history slideover loads it into the main conversation area
 
-#### 4.3 Routing
+The same grouped list component should be reused in two places:
+- Inline in the `/chat` null state
+- Inside the history slideover
 
-- `/chat` → shows the chat page with the most recent session (or creates one)
+#### 4.3 Routing and shared state
+
+- `/chat` → shows the current active session if one already exists in shared state; otherwise shows the chat null state with recent history
 - `/chat/[id]` → opens a specific session
 
-The slideover and the full page share the same composable and session state. Opening a session in the slideover and then navigating to `/chat` shows the same session.
+The slideover and the full page continue to share the same composable and session state. Opening a session in the global chat slideover and then navigating to `/chat` shows that same session.
+
+To support the null state cleanly, update the shared chat composable behavior:
+- Do not force-load the most recent session just because sessions were fetched
+- Allow `currentSessionId` to remain `null`
+- Expose grouped sessions and session deletion helpers
+- If the active session is deleted, return the page to the null state rather than silently switching to another conversation
 
 #### 4.4 Sidebar navigation update
 
@@ -766,10 +794,11 @@ Use the `i-lucide-message-square` icon.
 
 #### Definition of Done
 
-- Full chat page with session sidebar and spacious message area
-- Session history grouped by date
-- Session switching, creation, and deletion work
-- Sidebar and full page share the same session state
+- Full chat page with spacious message area and no second persistent sidebar
+- Null state shows recent session history grouped by date
+- Session history is accessible from an on-demand slideover
+- Session switching, creation, search, and deletion work
+- Sidebar slideover and full page share the same session state
 - Chat added to main navigation
 
 ---
@@ -880,7 +909,8 @@ dashboard/app/
 │   ├── ChatMessageUser.vue              # NEW — user message bubble
 │   ├── ChatMessageAssistant.vue         # NEW — assistant message with markdown
 │   ├── ChatToolCall.vue                 # NEW — tool call indicator
-│   └── ChatSessionSidebar.vue          # NEW — session list for full page
+│   ├── ChatSessionHistoryList.vue       # NEW — grouped session list
+│   └── ChatSessionHistorySlideover.vue  # NEW — on-demand session history
 ├── pages/
 │   └── chat/
 │       ├── index.vue                    # NEW — full chat page
@@ -938,7 +968,7 @@ The chat agent uses the same OpenAI API key and Supabase credentials already con
 | 1 | Database & API foundation | 1 day | Schema via Supabase MCP, session CRUD, memory CRUD |
 | 2 | Chat agent core | 2 days | Context assembly, 17 tools, streaming endpoint, compaction |
 | 3 | Chat slideover UI | 2 days | Slideover component, message rendering, input, layout integration |
-| 4 | Full chat page & history | 1 day | Dedicated page, session sidebar, navigation |
+| 4 | Full chat page & history | 1 day | Dedicated page, null state history, history slideover, navigation |
 | 5 | Memory management & polish | 1-2 days | Memory UI, session summaries, typing indicators, shortcuts |
 
 **Total estimated time: 7-8 days.** Sprint 1-2 are backend. Sprint 3-4 are frontend. Sprint 5 is polish and the memory management interface.
