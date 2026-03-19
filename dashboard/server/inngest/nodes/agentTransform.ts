@@ -5,7 +5,25 @@ import { agentTransformTools } from './tools'
 import type { NodeExecutor } from './types'
 
 const MODEL = 'gpt-5.4'
-const AGENT_LOOP_TIMEOUT_MS = 120_000
+const AGENT_LOOP_TIMEOUT_MS = 300_000
+const ARTIFACT_CREATED_RE = /^Artifact created: ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/
+
+function extractCreatedArtifactIds(toolCalls: Array<Record<string, unknown>>): string[] {
+  const ids: string[] = []
+
+  for (const call of toolCalls) {
+    if (call.name !== 'write_artifact' || call.isError === true || typeof call.output !== 'string') {
+      continue
+    }
+
+    const match = call.output.match(ARTIFACT_CREATED_RE)
+    if (match?.[1]) {
+      ids.push(match[1])
+    }
+  }
+
+  return ids
+}
 
 function buildInstructions(prompt: string | null) {
   return [
@@ -40,7 +58,7 @@ export const agentTransform: NodeExecutor = async (node, context) => {
         input: renderArtifactInput(artifact),
         tools: agentTransformTools,
         maxIterations: 10,
-        reasoning: { effort: 'high' },
+        reasoning: { effort: 'low' },
         context
       }))
 
@@ -86,19 +104,29 @@ export const agentTransform: NodeExecutor = async (node, context) => {
     input: inputText,
     tools: agentTransformTools,
     maxIterations: 10,
-    reasoning: { effort: 'high' },
+    reasoning: { effort: 'low' },
     context
   }))
 
   const description = describeAgentResult(result.output)
+  const createdIds = extractCreatedArtifactIds(result.toolCalls)
 
-  return {
-    artifacts: [{
+  const artifacts = createdIds.length > 0
+    ? createdIds.map(id => ({
+      title: '',
+      content: '',
+      type: 'markdown' as const,
+      metadata: { artifact_id: id }
+    }))
+    : [{
       title: node.title || 'Agent Output',
       content: result.output,
-      type: 'markdown',
+      type: 'markdown' as const,
       description
-    }],
+    }]
+
+  return {
+    artifacts,
     description,
     logs: {
       model: MODEL,

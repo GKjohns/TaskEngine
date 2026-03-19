@@ -1,4 +1,4 @@
-import type { NodeExecutor } from './types'
+import type { NodeExecutor, RuntimeArtifact } from './types'
 import {
   describeBranch,
   describeEmit,
@@ -12,6 +12,7 @@ import type { Database } from '../../../shared/types/database'
 import type { ArtifactType, RetrieveConfig, RetrieveTimeWindow } from '../../../shared/types/task-engine'
 
 type ArtifactRow = Database['public']['Tables']['artifacts']['Row']
+const ARTIFACT_TYPES: ArtifactType[] = ['markdown', 'text', 'json', 'csv']
 
 interface ResolvedRetrieveConfig {
   match: string | null
@@ -29,6 +30,102 @@ function replaceTitleTokens(value: string) {
   return value
     .replaceAll('{{date}}', now.toLocaleDateString())
     .replaceAll('{{datetime}}', now.toISOString())
+}
+
+function asRecord(value: unknown) {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function isArtifactType(value: unknown): value is ArtifactType {
+  return typeof value === 'string' && ARTIFACT_TYPES.includes(value as ArtifactType)
+}
+
+function buildPerArtifactTitle(nodeTitle: string | null, artifactTitle: string, index: number) {
+  const trimmedArtifactTitle = artifactTitle.trim()
+
+  if (nodeTitle && trimmedArtifactTitle) {
+    return `${nodeTitle} - ${trimmedArtifactTitle}`
+  }
+
+  if (nodeTitle) {
+    return fallbackArtifactTitle(nodeTitle, index)
+  }
+
+  return trimmedArtifactTitle || fallbackArtifactTitle('Output', index)
+}
+
+function fallbackArtifactTitle(prefix: string, index: number) {
+  return `${prefix} ${index + 1}`
+}
+
+function mapInputArtifactsToRuntimeArtifacts(inputArtifacts: Parameters<NodeExecutor>[1]['inputArtifacts']) {
+  return inputArtifacts.map(artifact => ({
+    title: artifact.title,
+    content: artifact.content || '',
+    type: artifact.type,
+    metadata: {
+      source_id: artifact.id
+    }
+  }))
+}
+
+function parseStructuredEmitArtifacts(
+  content: string | null,
+  fallbackType: ArtifactType
+): RuntimeArtifact[] {
+  if (!content?.trim()) {
+    return []
+  }
+
+  try {
+    const parsed = JSON.parse(content)
+    const payload = asRecord(parsed)
+    const rawArtifacts = Array.isArray(payload?.artifacts) ? payload.artifacts : []
+
+    return rawArtifacts
+      .map((item) => {
+        const artifact = asRecord(item)
+
+        if (!artifact) {
+          return null
+        }
+
+        const title = typeof artifact.title === 'string' ? artifact.title.trim() : ''
+        const artifactContent = typeof artifact.content === 'string' ? artifact.content : ''
+
+        if (!title || !artifactContent) {
+          return null
+        }
+
+        const metadata = asRecord(artifact.metadata)
+        const filename = typeof artifact.filename === 'string' ? artifact.filename.trim() : ''
+        const sourcePayloadId = typeof artifact.id === 'string' ? artifact.id.trim() : ''
+        const description = typeof artifact.description === 'string' && artifact.description.trim()
+          ? artifact.description.trim()
+          : undefined
+
+        return {
+          title,
+          content: artifactContent,
+          type: isArtifactType(artifact.format)
+            ? artifact.format
+            : isArtifactType(artifact.type)
+              ? artifact.type
+              : fallbackType,
+          metadata: {
+            ...(metadata || {}),
+            ...(filename ? { filename } : {}),
+            ...(sourcePayloadId ? { source_payload_id: sourcePayloadId } : {})
+          },
+          ...(description ? { description } : {})
+        } satisfies RuntimeArtifact
+      })
+      .filter((artifact): artifact is RuntimeArtifact => Boolean(artifact))
+  } catch {
+    return []
+  }
 }
 
 function evaluateBranchCondition(condition: string | null, inputText: string, artifactCount: number) {
@@ -251,14 +348,7 @@ export const retrieve: NodeExecutor = async (node, context) => {
   if (hasUserOverride) {
     const count = context.inputArtifacts.length
     return {
-      artifacts: context.inputArtifacts.map(artifact => ({
-        title: artifact.title,
-        content: artifact.content || '',
-        type: artifact.type,
-        metadata: {
-          source_id: artifact.id
-        }
-      })),
+      artifacts: mapInputArtifactsToRuntimeArtifacts(context.inputArtifacts),
       description: describeRetrieve({
         count,
         fallbackSource: 'run_input'
@@ -277,14 +367,7 @@ export const retrieve: NodeExecutor = async (node, context) => {
   if (!config) {
     const count = context.inputArtifacts.length
     return {
-      artifacts: context.inputArtifacts.map(artifact => ({
-        title: artifact.title,
-        content: artifact.content || '',
-        type: artifact.type,
-        metadata: {
-          source_id: artifact.id
-        }
-      })),
+      artifacts: mapInputArtifactsToRuntimeArtifacts(context.inputArtifacts),
       description: describeRetrieve({ count }),
       logs: {
         retrieved_count: count,
@@ -392,6 +475,38 @@ export const retrieve: NodeExecutor = async (node, context) => {
 export const emit: NodeExecutor = async (node, context) => {
   const title = replaceTitleTokens(node.title || 'Output')
   const format = node.format || 'markdown'
+
+  if (node.per_artifact) {
+    const structuredArtifacts = context.inputArtifacts.flatMap(artifact =>
+      parseStructuredEmitArtifacts(artifact.content, format))
+
+    if (structuredArtifacts.length > 0) {
+      return {
+        artifacts: structuredArtifacts,
+        description: `Emitted ${structuredArtifacts.length} artifacts from structured payload.`,
+        logs: {
+          emitted_title: title,
+          artifact_count: structuredArtifacts.length,
+          mode: 'structured_payload'
+        }
+      }
+    }
+
+    return {
+      artifacts: context.inputArtifacts.map((artifact, index) => ({
+        title: buildPerArtifactTitle(node.title ? title : null, artifact.title, index),
+        content: artifact.content || '',
+        type: format
+      })),
+      description: `Emitted ${context.inputArtifacts.length} artifacts individually.`,
+      logs: {
+        emitted_title: title,
+        artifact_count: context.inputArtifacts.length,
+        mode: 'passthrough_per_artifact'
+      }
+    }
+  }
+
   const content = joinArtifactInputs(context.inputArtifacts)
 
   return {
