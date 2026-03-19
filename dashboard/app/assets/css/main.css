@@ -1,5 +1,6 @@
 @import "tailwindcss" theme(static);
 @import "@nuxt/ui";
+@import "katex/dist/katex.min.css";
 
 @theme static {
   --font-sans: 'Public Sans', sans-serif;
@@ -74,3 +75,18 @@
 .dark .json-number { color: #FBBF24; }
 .dark .json-boolean { color: #C084FC; }
 .dark .json-null { color: #A3A3A3; }
+
+.tiptap-mathematics-render {
+  color: inherit;
+}
+
+.tiptap-mathematics-render[data-type="inline-math"] {
+  display: inline-flex;
+  max-width: 100%;
+  vertical-align: middle;
+}
+
+.tiptap-mathematics-render[data-type="block-math"] {
+  margin: 0.75rem 0;
+  overflow-x: auto;
+}

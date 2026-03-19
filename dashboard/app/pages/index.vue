@@ -56,7 +56,10 @@ interface DashboardData {
   }>
 }
 
+type FailedRunItem = DashboardData['failedRuns'][number]
+
 const { refreshPendingReviewCount } = useDashboard()
+const toast = useToast()
 
 const greeting = computed(() => {
   const hour = new Date().getHours()
@@ -68,6 +71,8 @@ const greeting = computed(() => {
 const actionError = ref('')
 const pendingTaskId = ref<string | null>(null)
 const pendingReviewAction = ref<PendingReviewAction | null>(null)
+const deletingRunId = ref<string | null>(null)
+const hasLoadedDashboard = ref(false)
 
 const { data, refresh, status } = await useFetch<DashboardData>('/api/dashboard', {
   default: (): DashboardData => ({
@@ -90,8 +95,15 @@ const { data, refresh, status } = await useFetch<DashboardData>('/api/dashboard'
   })
 })
 
+watchEffect(() => {
+  if (status.value !== 'pending') {
+    hasLoadedDashboard.value = true
+  }
+})
+
 const stats = computed(() => data.value.stats)
-const hasAttention = computed(() => data.value.pendingReviews.length > 0 || data.value.failedRuns.length > 0)
+const visibleFailedRuns = computed(() => data.value.failedRuns)
+const hasAttention = computed(() => data.value.pendingReviews.length > 0 || visibleFailedRuns.value.length > 0)
 const visiblePendingReviews = computed(() => data.value.pendingReviews.slice(0, 2))
 const hiddenPendingReviewCount = computed(() => Math.max(0, stats.value.pendingReviewCount - visiblePendingReviews.value.length))
 const isFirstUseDashboard = computed(() => !hasAttention.value
@@ -99,6 +111,7 @@ const isFirstUseDashboard = computed(() => !hasAttention.value
   && !data.value.upcomingJobs.length
   && !data.value.manualTasks.length
   && stats.value.totalTasks === 0)
+const showInitialSkeleton = computed(() => status.value === 'pending' && !hasLoadedDashboard.value)
 
 function formatUpcomingRun(nextRunAt: string | null) {
   if (!nextRunAt) {
@@ -108,7 +121,7 @@ function formatUpcomingRun(nextRunAt: string | null) {
   return `Scheduled ${formatRelativeTime(nextRunAt)}`
 }
 
-async function startTask(taskId: string) {
+async function startTask(taskId: string, options: { navigateOnSuccess?: boolean } = {}) {
   pendingTaskId.value = taskId
   actionError.value = ''
 
@@ -118,12 +131,91 @@ async function startTask(taskId: string) {
       body: { task_id: taskId }
     })
 
-    await refresh()
-    await navigateTo(`/runs/${run.id}`)
+    if (options.navigateOnSuccess !== false) {
+      await navigateTo(`/runs/${run.id}`)
+    }
+
+    return run
   } catch (error) {
     actionError.value = error instanceof Error ? error.message : 'Failed to start the task.'
+    return null
   } finally {
     pendingTaskId.value = null
+  }
+}
+
+function removeFailedRunFromDashboard(runId: string) {
+  const nextFailedRuns = data.value.failedRuns.filter(run => run.id !== runId)
+
+  if (nextFailedRuns.length === data.value.failedRuns.length) {
+    return
+  }
+
+  data.value = {
+    ...data.value,
+    failedRuns: nextFailedRuns,
+    stats: {
+      ...data.value.stats,
+      failedRunCount: Math.max(0, data.value.stats.failedRunCount - 1)
+    }
+  }
+}
+
+function incrementLiveRunCount() {
+  data.value = {
+    ...data.value,
+    stats: {
+      ...data.value.stats,
+      liveRunCount: data.value.stats.liveRunCount + 1
+    }
+  }
+}
+
+async function retryFailedRun(run: FailedRunItem) {
+  const nextRun = await startTask(run.task_id, { navigateOnSuccess: false })
+
+  if (!nextRun) {
+    return
+  }
+
+  removeFailedRunFromDashboard(run.id)
+  incrementLiveRunCount()
+
+  toast.add({
+    title: 'Retry started',
+    description: `${run.task_title} is queued again.`,
+    color: 'primary',
+    icon: 'i-lucide-rotate-cw'
+  })
+
+  await nextTick()
+  focusPrimaryDashboardTarget()
+}
+
+async function deleteFailedRun(run: FailedRunItem) {
+  deletingRunId.value = run.id
+  actionError.value = ''
+
+  try {
+    await $fetch(`/api/runs/${run.id}`, {
+      method: 'DELETE'
+    })
+
+    removeFailedRunFromDashboard(run.id)
+
+    toast.add({
+      title: 'Failed run deleted',
+      description: `${run.task_title} was removed from the dashboard.`,
+      color: 'primary',
+      icon: 'i-lucide-trash-2'
+    })
+
+    await nextTick()
+    focusPrimaryDashboardTarget()
+  } catch (error) {
+    actionError.value = error instanceof Error ? error.message : 'Failed to delete the run.'
+  } finally {
+    deletingRunId.value = null
   }
 }
 
@@ -178,7 +270,7 @@ function focusPrimaryDashboardTarget() {
       {{ greeting }}. Catch up on what changed, what needs review, and what is scheduled next.
     </p>
 
-    <div v-if="status === 'pending'" class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
+    <div v-if="showInitialSkeleton" class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
       <div class="space-y-4">
         <div class="h-24 animate-pulse rounded-xl border border-default bg-elevated/40" />
         <div class="h-48 animate-pulse rounded-xl border border-default bg-elevated/40" />
@@ -236,14 +328,14 @@ function focusPrimaryDashboardTarget() {
         </section>
 
         <!-- Attention: failed runs -->
-        <section v-if="data.failedRuns.length" class="space-y-2">
+        <section v-if="visibleFailedRuns.length" class="space-y-2">
           <h3 class="text-xs font-medium tracking-wide text-muted uppercase">
             Needs attention
           </h3>
 
-          <div class="space-y-2">
+          <TransitionGroup name="failed-run" tag="div" class="space-y-2">
             <div
-              v-for="run in data.failedRuns"
+              v-for="run in visibleFailedRuns"
               :key="run.id"
               class="flex items-center gap-3 rounded-2xl bg-error/5 p-3"
             >
@@ -263,23 +355,27 @@ function focusPrimaryDashboardTarget() {
                   size="sm"
                   icon="i-lucide-rotate-cw"
                   :loading="pendingTaskId === run.task_id"
+                  :disabled="deletingRunId === run.id"
                   :aria-label="`Retry task ${run.task_title}`"
-                  @click="startTask(run.task_id)"
+                  @click="retryFailedRun(run)"
                 >
                   Retry
                 </UButton>
                 <UButton
-                  color="neutral"
+                  color="error"
                   variant="ghost"
                   size="sm"
-                  :to="`/runs/${run.id}`"
-                  :aria-label="`Open activity for ${run.task_title}`"
+                  icon="i-lucide-trash-2"
+                  :loading="deletingRunId === run.id"
+                  :disabled="pendingTaskId === run.task_id"
+                  :aria-label="`Delete failed run for ${run.task_title}`"
+                  @click="deleteFailedRun(run)"
                 >
-                  View
+                  Delete
                 </UButton>
               </div>
             </div>
-          </div>
+          </TransitionGroup>
         </section>
 
         <!-- All clear -->
@@ -469,6 +565,17 @@ function focusPrimaryDashboardTarget() {
 
 .review-card-enter-from,
 .review-card-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+.failed-run-enter-active,
+.failed-run-leave-active {
+  transition: all 0.2s ease;
+}
+
+.failed-run-enter-from,
+.failed-run-leave-to {
   opacity: 0;
   transform: translateY(-8px);
 }

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { Mathematics } from '@tiptap/extension-mathematics'
+
 type ContentFormat = 'markdown' | 'text' | 'json' | 'csv'
 
 const props = withDefaults(defineProps<{
@@ -43,6 +45,14 @@ const editorContentClass = computed(() => props.mono ? 'font-mono text-sm' : 'te
 const editorBaseClass = computed(() => props.surface === 'plain'
   ? 'min-h-0 bg-transparent !px-0 !py-0'
   : 'min-h-0 rounded-xl bg-elevated/40 !px-6 !py-6')
+const mathExtensions = [
+  Mathematics.configure({
+    katexOptions: {
+      strict: 'ignore',
+      throwOnError: false
+    }
+  })
+]
 </script>
 
 <template>
@@ -53,6 +63,7 @@ const editorBaseClass = computed(() => props.surface === 'plain'
       :editable="false"
       :image="false"
       :mention="false"
+      :extensions="mathExtensions"
       :ui="{
         root: 'w-full',
         base: editorBaseClass,

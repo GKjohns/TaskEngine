@@ -210,13 +210,14 @@ async function removeMemory(memoryId: string) {
               class="rounded-3xl border border-default bg-default p-5"
             >
               <template v-if="editingId === memory.id">
-                <div class="space-y-4">
+                <div class="mx-auto max-w-xl space-y-4">
                   <UFormField label="Memory">
                     <UTextarea
                       v-model="draftContent"
                       autoresize
                       :rows="2"
                       :maxrows="8"
+                      class="w-full"
                     />
                   </UFormField>
 
@@ -227,6 +228,7 @@ async function removeMemory(memoryId: string) {
                         label: categoryMeta[category].label,
                         value: category
                       }))"
+                      class="w-full"
                     />
                   </UFormField>
 
