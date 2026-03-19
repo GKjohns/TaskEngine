@@ -117,7 +117,7 @@ async function removeMemory(memoryId: string) {
 </script>
 
 <template>
-  <DashboardPage title="Chat Memory">
+  <DashboardPage title="Chat Memory" content-width="narrow">
     <div class="space-y-6">
       <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div class="max-w-3xl">

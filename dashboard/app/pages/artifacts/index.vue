@@ -30,7 +30,7 @@ const { data: tasks } = await useFetch<TaskRecord[]>('/api/tasks', {
 </script>
 
 <template>
-  <DashboardPage title="Documents">
+  <DashboardPage title="Documents" content-width="wide">
     <div class="space-y-6">
       <div class="flex items-center justify-between gap-3">
         <div>
@@ -56,8 +56,9 @@ const { data: tasks } = await useFetch<TaskRecord[]>('/api/tasks', {
         </div>
       </div>
 
-      <div class="grid gap-3 xl:grid-cols-[minmax(0,1.3fr)_220px_220px_auto]">
-        <UFormField label="Search">
+      <div class="rounded-2xl border border-default bg-elevated/20 p-4">
+        <div class="flex flex-col gap-4 xl:flex-row xl:items-end">
+          <UFormField label="Search" class="min-w-0 flex-1">
           <UInput
             v-model="searchQuery"
             class="w-full"
@@ -66,51 +67,54 @@ const { data: tasks } = await useFetch<TaskRecord[]>('/api/tasks', {
           />
         </UFormField>
 
-        <UFormField label="Type">
-          <USelect
-            v-model="typeFilter"
-            :items="[
-              { label: 'All types', value: 'all' },
-              { label: 'Markdown', value: 'markdown' },
-              { label: 'Text', value: 'text' },
-              { label: 'JSON', value: 'json' },
-              { label: 'CSV', value: 'csv' }
-            ]"
-            class="w-full"
-          />
-        </UFormField>
+          <div class="grid gap-3 sm:grid-cols-2 xl:flex xl:items-end">
+            <UFormField label="Type" class="sm:w-52">
+              <USelect
+                v-model="typeFilter"
+                :items="[
+                  { label: 'All types', value: 'all' },
+                  { label: 'Markdown', value: 'markdown' },
+                  { label: 'Text', value: 'text' },
+                  { label: 'JSON', value: 'json' },
+                  { label: 'CSV', value: 'csv' }
+                ]"
+                class="w-full"
+              />
+            </UFormField>
 
-        <UFormField label="Task">
-          <USelect
-            v-model="taskFilter"
-            :items="[
-              { label: 'All tasks', value: 'all' },
-              ...((tasks || []).map(task => ({ label: task.title, value: task.id })))
-            ]"
-            class="w-full"
-          />
-        </UFormField>
+            <UFormField label="Task" class="sm:w-60">
+              <USelect
+                v-model="taskFilter"
+                :items="[
+                  { label: 'All tasks', value: 'all' },
+                  ...((tasks || []).map(task => ({ label: task.title, value: task.id })))
+                ]"
+                class="w-full"
+              />
+            </UFormField>
 
-        <UFormField label="View">
-          <div class="flex rounded-lg border border-default p-1">
-            <button
-              type="button"
-              class="flex-1 rounded-md px-3 py-2 text-sm transition"
-              :class="viewMode === 'cards' ? 'bg-primary/10 text-primary' : 'text-muted hover:bg-elevated/60'"
-              @click="viewMode = 'cards'"
-            >
-              Cards
-            </button>
-            <button
-              type="button"
-              class="flex-1 rounded-md px-3 py-2 text-sm transition"
-              :class="viewMode === 'list' ? 'bg-primary/10 text-primary' : 'text-muted hover:bg-elevated/60'"
-              @click="viewMode = 'list'"
-            >
-              List
-            </button>
+            <UFormField label="View" class="sm:w-fit">
+              <div class="flex rounded-lg border border-default p-1">
+                <button
+                  type="button"
+                  class="flex-1 rounded-md px-3 py-2 text-sm transition"
+                  :class="viewMode === 'cards' ? 'bg-primary/10 text-primary' : 'text-muted hover:bg-elevated/60'"
+                  @click="viewMode = 'cards'"
+                >
+                  Cards
+                </button>
+                <button
+                  type="button"
+                  class="flex-1 rounded-md px-3 py-2 text-sm transition"
+                  :class="viewMode === 'list' ? 'bg-primary/10 text-primary' : 'text-muted hover:bg-elevated/60'"
+                  @click="viewMode = 'list'"
+                >
+                  List
+                </button>
+              </div>
+            </UFormField>
           </div>
-        </UFormField>
+        </div>
       </div>
 
       <UAlert

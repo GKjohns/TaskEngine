@@ -77,7 +77,7 @@ async function resolveReview(payload: {
 </script>
 
 <template>
-  <DashboardPage title="Reviews">
+  <DashboardPage title="Reviews" content-width="wide">
     <div class="space-y-6">
       <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>

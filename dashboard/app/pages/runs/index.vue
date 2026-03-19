@@ -20,7 +20,7 @@ const visibleRuns = computed(() => (data.value || []).filter(run =>
 </script>
 
 <template>
-  <DashboardPage title="Activity">
+  <DashboardPage title="Activity" content-width="narrow">
     <div class="space-y-6">
       <div class="flex items-center justify-between gap-3">
         <div>

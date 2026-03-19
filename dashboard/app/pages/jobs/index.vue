@@ -126,7 +126,7 @@ async function handleJobAction(job: JobListItem, action: JobAction['key']) {
 </script>
 
 <template>
-  <DashboardPage title="Schedules">
+  <DashboardPage title="Schedules" content-width="narrow">
     <div class="space-y-6">
       <div class="flex items-center justify-between gap-3">
         <div>
