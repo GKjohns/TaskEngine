@@ -1,9 +1,9 @@
 export interface ToolEntity {
-  type: 'task' | 'artifact' | 'run' | 'review'
+  type: 'task' | 'artifact' | 'run' | 'review' | 'memory'
   id: string
   title: string
   status?: string
-  link: string
+  link?: string
 }
 
 export interface ToolEntityDetail extends ToolEntity {
@@ -188,6 +188,45 @@ export function parseResolveReview(output: string): ToolEntityDetail | null {
   return { type: 'review', id: match[1], title: 'Review resolved', status, link: '/reviews', meta }
 }
 
+export function parseSaveMemory(output: string): ToolEntityDetail | null {
+  const match = output.match(/^Saved memory ([a-f0-9-]{36}) \((\w+)\): (.+)$/m)
+  if (!match) return null
+
+  return {
+    type: 'memory',
+    id: match[1],
+    title: 'Memory saved',
+    status: match[2],
+    meta: [{ label: '', value: match[3] }]
+  }
+}
+
+export function parseUpdateMemory(output: string): ToolEntityDetail | null {
+  const match = output.match(/^Updated memory ([a-f0-9-]{36}) \((\w+)\): (.+)$/m)
+  if (!match) return null
+
+  return {
+    type: 'memory',
+    id: match[1],
+    title: 'Memory updated',
+    status: match[2],
+    meta: [{ label: '', value: match[3] }]
+  }
+}
+
+export function parseDeleteMemory(output: string): ToolEntityDetail | null {
+  const match = output.match(/^Deleted memory ([a-f0-9-]{36})\.$/m)
+  if (!match) return null
+
+  return {
+    type: 'memory',
+    id: match[1],
+    title: 'Memory removed',
+    status: 'deleted',
+    meta: [{ label: 'ID', value: match[1] }]
+  }
+}
+
 export function parseListTasks(output: string): ToolListResult | null {
   const countMatch = output.match(/^Found (\d+) tasks?:/m)
   if (!countMatch) {
@@ -266,6 +305,29 @@ export function parseListReviews(output: string): ToolListResult | null {
     entities.push({
       type: 'review', id: idMatch[1], title: taskMatch?.[1] || 'Review',
       status: statusMatch?.[1], link: '/reviews'
+    })
+  }
+
+  return { count: parseInt(countMatch[1]), entities }
+}
+
+export function parseListMemories(output: string): ToolListResult | null {
+  const countMatch = output.match(/^Found (\d+) memor(?:y|ies):/m)
+  if (!countMatch) {
+    if (output.includes('No saved memories')) return { count: 0, entities: [] }
+    return null
+  }
+
+  const entities: ToolEntity[] = []
+  for (const item of splitItems(output)) {
+    const match = item.match(/^([a-f0-9-]{36}) \[(\w+)\] (.+)$/)
+    if (!match) continue
+
+    entities.push({
+      type: 'memory',
+      id: match[1],
+      status: match[2],
+      title: match[3]
     })
   }
 

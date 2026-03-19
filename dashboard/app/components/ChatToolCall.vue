@@ -7,11 +7,15 @@ import {
   parseGetRun,
   parseRunTask,
   parseCreateTask,
+  parseSaveMemory,
+  parseUpdateMemory,
+  parseDeleteMemory,
   parseResolveReview,
   parseListTasks,
   parseListArtifacts,
   parseListRuns,
-  parseListReviews
+  parseListReviews,
+  parseListMemories
 } from '../utils/chatToolParsers'
 
 const props = defineProps<{
@@ -50,6 +54,9 @@ const entityDetail = computed(() => {
     case 'get_artifact': return parseGetArtifact(props.step.output)
     case 'get_run': return parseGetRun(props.step.output)
     case 'create_task': return parseCreateTask(props.step.output)
+    case 'save_memory': return parseSaveMemory(props.step.output)
+    case 'update_memory': return parseUpdateMemory(props.step.output)
+    case 'delete_memory': return parseDeleteMemory(props.step.output)
     case 'resolve_review': return parseResolveReview(props.step.output)
     default: return null
   }
@@ -62,6 +69,7 @@ const listResult = computed(() => {
     case 'list_artifacts': return parseListArtifacts(props.step.output)
     case 'list_runs': return parseListRuns(props.step.output)
     case 'list_reviews': return parseListReviews(props.step.output)
+    case 'list_memories': return parseListMemories(props.step.output)
     default: return null
   }
 })
@@ -71,7 +79,8 @@ const listEntityLabel = computed(() => {
     list_tasks: 'task',
     list_artifacts: 'document',
     list_runs: 'run',
-    list_reviews: 'review'
+    list_reviews: 'review',
+    list_memories: 'memory'
   }
   return labels[props.step.name] || 'result'
 })

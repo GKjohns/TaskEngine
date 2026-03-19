@@ -10,7 +10,8 @@ const typeIcons: Record<string, string> = {
   task: 'i-lucide-square-check-big',
   artifact: 'i-lucide-file-text',
   run: 'i-lucide-play',
-  review: 'i-lucide-message-circle-warning'
+  review: 'i-lucide-message-circle-warning',
+  memory: 'i-lucide-brain'
 }
 
 const linkLabels: Record<string, string> = {
@@ -60,6 +61,7 @@ const descriptionText = computed(() => {
           </span>
         </div>
         <NuxtLink
+          v-if="entity.link"
           :to="entity.link"
           class="shrink-0 inline-flex items-center gap-0.5 text-[11px] font-medium text-primary hover:underline"
         >

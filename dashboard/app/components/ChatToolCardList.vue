@@ -20,10 +20,11 @@ const overflowCount = computed(() => Math.max(0, props.list.entities.length - ma
         {{ list.count }} {{ entityLabel }}{{ list.count !== 1 ? 's' : '' }}
       </p>
       <div class="space-y-px">
-        <NuxtLink
+        <component
+          :is="entity.link ? 'NuxtLink' : 'div'"
           v-for="entity in visibleEntities"
           :key="entity.id"
-          :to="entity.link"
+          v-bind="entity.link ? { to: entity.link } : {}"
           class="-mx-1.5 flex items-center justify-between gap-2 rounded-md px-1.5 py-1 transition-colors hover:bg-default/60"
         >
           <span class="min-w-0 text-xs text-highlighted break-words">{{ entity.title }}</span>
@@ -36,7 +37,7 @@ const overflowCount = computed(() => Math.max(0, props.list.entities.length - ma
           >
             {{ entity.status.replace(/_/g, ' ') }}
           </UBadge>
-        </NuxtLink>
+        </component>
       </div>
       <p v-if="overflowCount > 0" class="mt-1 px-1.5 text-[11px] text-muted">
         +{{ overflowCount }} more
