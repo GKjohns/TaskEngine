@@ -83,46 +83,47 @@ function parseStructuredEmitArtifacts(
     const parsed = JSON.parse(content)
     const payload = asRecord(parsed)
     const rawArtifacts = Array.isArray(payload?.artifacts) ? payload.artifacts : []
+    const artifacts: RuntimeArtifact[] = []
 
-    return rawArtifacts
-      .map((item) => {
-        const artifact = asRecord(item)
+    for (const item of rawArtifacts) {
+      const artifact = asRecord(item)
 
-        if (!artifact) {
-          return null
-        }
+      if (!artifact) {
+        continue
+      }
 
-        const title = typeof artifact.title === 'string' ? artifact.title.trim() : ''
-        const artifactContent = typeof artifact.content === 'string' ? artifact.content : ''
+      const title = typeof artifact.title === 'string' ? artifact.title.trim() : ''
+      const artifactContent = typeof artifact.content === 'string' ? artifact.content : ''
 
-        if (!title || !artifactContent) {
-          return null
-        }
+      if (!title || !artifactContent) {
+        continue
+      }
 
-        const metadata = asRecord(artifact.metadata)
-        const filename = typeof artifact.filename === 'string' ? artifact.filename.trim() : ''
-        const sourcePayloadId = typeof artifact.id === 'string' ? artifact.id.trim() : ''
-        const description = typeof artifact.description === 'string' && artifact.description.trim()
-          ? artifact.description.trim()
-          : undefined
+      const metadata = asRecord(artifact.metadata)
+      const filename = typeof artifact.filename === 'string' ? artifact.filename.trim() : ''
+      const sourcePayloadId = typeof artifact.id === 'string' ? artifact.id.trim() : ''
+      const description = typeof artifact.description === 'string' && artifact.description.trim()
+        ? artifact.description.trim()
+        : undefined
 
-        return {
-          title,
-          content: artifactContent,
-          type: isArtifactType(artifact.format)
-            ? artifact.format
-            : isArtifactType(artifact.type)
-              ? artifact.type
-              : fallbackType,
-          metadata: {
-            ...(metadata || {}),
-            ...(filename ? { filename } : {}),
-            ...(sourcePayloadId ? { source_payload_id: sourcePayloadId } : {})
-          },
-          ...(description ? { description } : {})
-        } satisfies RuntimeArtifact
+      artifacts.push({
+        title,
+        content: artifactContent,
+        type: isArtifactType(artifact.format)
+          ? artifact.format
+          : isArtifactType(artifact.type)
+            ? artifact.type
+            : fallbackType,
+        metadata: {
+          ...(metadata || {}),
+          ...(filename ? { filename } : {}),
+          ...(sourcePayloadId ? { source_payload_id: sourcePayloadId } : {})
+        },
+        ...(description ? { description } : {})
       })
-      .filter((artifact): artifact is RuntimeArtifact => Boolean(artifact))
+    }
+
+    return artifacts
   } catch {
     return []
   }

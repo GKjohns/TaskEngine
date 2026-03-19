@@ -137,7 +137,7 @@ async function handlePromptSubmit(event: Event) {
         return
       }
 
-      return navigateTo(`/chat/${sessionId}`, { replace: true })
+      void navigateTo(`/chat/${sessionId}`, { replace: true })
     }
   })
   if (!didSend) {
@@ -167,7 +167,7 @@ async function useStarterPrompt(prompt: string) {
         return
       }
 
-      return navigateTo(`/chat/${sessionId}`, { replace: true })
+      void navigateTo(`/chat/${sessionId}`, { replace: true })
     }
   })
 }
@@ -440,24 +440,24 @@ watch(
     </div>
 
     <div ref="promptContainer" class="px-4 pb-4 sm:px-6 sm:pb-5">
-        <UChatPrompt
-          v-model="draft"
-          variant="subtle"
-          placeholder="Ask anything or give an instruction..."
-          class="rounded-b-none"
-          @submit="handlePromptSubmit"
-        >
-          <template #footer>
-            <span class="text-[11px] text-muted">{{ helperText }}</span>
+      <UChatPrompt
+        v-model="draft"
+        variant="subtle"
+        placeholder="Ask anything or give an instruction..."
+        class="rounded-b-none"
+        @submit="handlePromptSubmit"
+      >
+        <template #footer>
+          <span class="text-[11px] text-muted">{{ helperText }}</span>
 
-            <UChatPromptSubmit
-              :status="chatStatus"
-              color="neutral"
-              size="sm"
-              @stop="stopChat"
-            />
-          </template>
-        </UChatPrompt>
+          <UChatPromptSubmit
+            :status="chatStatus"
+            color="neutral"
+            size="sm"
+            @stop="stopChat"
+          />
+        </template>
+      </UChatPrompt>
     </div>
   </div>
 

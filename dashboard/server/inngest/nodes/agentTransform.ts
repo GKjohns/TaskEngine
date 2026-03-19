@@ -7,8 +7,13 @@ import type { NodeExecutor } from './types'
 const MODEL = 'gpt-5.4'
 const AGENT_LOOP_TIMEOUT_MS = 300_000
 const ARTIFACT_CREATED_RE = /^Artifact created: ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/
+type ToolCallResult = {
+  name: string
+  output: string
+  isError: boolean
+}
 
-function extractCreatedArtifactIds(toolCalls: Array<Record<string, unknown>>): string[] {
+function extractCreatedArtifactIds(toolCalls: ToolCallResult[]): string[] {
   const ids: string[] = []
 
   for (const call of toolCalls) {
@@ -113,17 +118,17 @@ export const agentTransform: NodeExecutor = async (node, context) => {
 
   const artifacts = createdIds.length > 0
     ? createdIds.map(id => ({
-      title: '',
-      content: '',
-      type: 'markdown' as const,
-      metadata: { artifact_id: id }
-    }))
+        title: '',
+        content: '',
+        type: 'markdown' as const,
+        metadata: { artifact_id: id }
+      }))
     : [{
-      title: node.title || 'Agent Output',
-      content: result.output,
-      type: 'markdown' as const,
-      description
-    }]
+        title: node.title || 'Agent Output',
+        content: result.output,
+        type: 'markdown' as const,
+        description
+      }]
 
   return {
     artifacts,
