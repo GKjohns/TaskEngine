@@ -3,7 +3,13 @@ import { createSharedComposable } from '@vueuse/core'
 const useSharedDashboard = createSharedComposable(() => {
   const router = useRouter()
   const route = useRoute()
-  const { toggle: toggleChat } = useGlobalChat()
+  const {
+    toggle: toggleChat,
+    isOpen: isChatOpen,
+    currentSessionId,
+    startDraftSession,
+    closeChat
+  } = useGlobalChat()
 
   if (import.meta.client) {
     defineShortcuts({
@@ -17,6 +23,26 @@ const useSharedDashboard = createSharedComposable(() => {
       'g-p': () => router.push('/plans'),
       'g-r': () => router.push('/runs'),
       'c': () => toggleChat(),
+      'escape': () => {
+        if (isChatOpen.value) {
+          closeChat()
+        }
+      },
+      'meta_shift_c': () => {
+        const target = currentSessionId.value ? `/chat/${currentSessionId.value}` : '/chat'
+        router.push(target)
+      },
+      'meta_n': () => {
+        if (!route.path.startsWith('/chat') && !isChatOpen.value) {
+          return
+        }
+
+        startDraftSession()
+
+        if (route.path.startsWith('/chat')) {
+          void router.push('/chat')
+        }
+      },
       'n': () => router.push('/tasks/new'),
       'r': () => {
         if (route.path !== '/') {

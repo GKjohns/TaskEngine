@@ -6,6 +6,8 @@ const props = defineProps<{
   step: ChatToolStep
 }>()
 
+const expanded = ref(false)
+
 const verbMap: Record<string, string> = {
   list_tasks: 'Checking tasks',
   get_task: 'Opening task details',
@@ -35,6 +37,45 @@ const summary = computed(() => {
 
   return truncateText(props.step.output.replace(/\s+/g, ' ').trim(), 120)
 })
+
+const hasDetails = computed(() => {
+  return Boolean(props.step.output && props.step.output.trim() && props.step.output.trim().length > 120)
+})
+
+const actionLink = computed(() => {
+  const output = props.step.output || ''
+
+  if (props.step.name === 'run_task') {
+    const runId = output.match(/Started run ([a-z0-9-]+)/i)?.[1]
+
+    if (runId) {
+      return {
+        to: `/runs/${runId}`,
+        label: 'Open run'
+      }
+    }
+  }
+
+  if (props.step.name === 'create_task') {
+    const taskId = output.match(/\(([a-z0-9-]+)\)\./i)?.[1]
+
+    if (taskId) {
+      return {
+        to: `/tasks/${taskId}`,
+        label: 'Open task'
+      }
+    }
+  }
+
+  if (props.step.name === 'resolve_review' && props.step.status === 'done') {
+    return {
+      to: '/reviews',
+      label: 'Open reviews'
+    }
+  }
+
+  return null
+})
 </script>
 
 <template>
@@ -54,5 +95,37 @@ const summary = computed(() => {
         </p>
       </div>
     </div>
+
+    <div
+      v-if="step.output && (hasDetails || actionLink)"
+      class="mt-3 flex flex-wrap items-center gap-2 border-t border-default/70 pt-3"
+    >
+      <UButton
+        v-if="hasDetails"
+        color="neutral"
+        variant="ghost"
+        size="xs"
+        :icon="expanded ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+        @click="expanded = !expanded"
+      >
+        {{ expanded ? 'Hide details' : 'View details' }}
+      </UButton>
+
+      <UButton
+        v-if="actionLink"
+        :to="actionLink.to"
+        color="primary"
+        variant="soft"
+        size="xs"
+        icon="i-lucide-arrow-up-right"
+      >
+        {{ actionLink.label }}
+      </UButton>
+    </div>
+
+    <pre
+      v-if="expanded && step.output"
+      class="mt-3 overflow-x-auto rounded-lg bg-default px-3 py-2 text-[11px] leading-5 text-muted whitespace-pre-wrap"
+    >{{ step.output }}</pre>
   </div>
 </template>

@@ -86,7 +86,7 @@ function isActiveLink(path: string) {
 
     <ChatSlideover />
 
-    <div v-if="!isChatOpen" class="pointer-events-none fixed right-5 bottom-5 z-20">
+    <div v-if="!isChatOpen && !route.path.startsWith('/chat')" class="pointer-events-none fixed right-5 bottom-5 z-20">
       <UTooltip text="Open chat (C)" :content="{ side: 'left' }">
         <UButton
           color="primary"

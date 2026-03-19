@@ -24,18 +24,18 @@ const emit = defineEmits<{
     title="Conversation history"
     description="Search recent chats, reopen a conversation, or remove one you no longer need."
     :ui="{
-      content: 'w-full sm:max-w-[440px]',
-      body: 'p-0'
+      content: 'flex h-full w-full flex-col sm:max-w-[440px]',
+      body: 'min-h-0 flex-1 p-0'
     }"
   >
     <template #body>
-      <div class="space-y-4 p-4">
-        <div class="flex items-center justify-between gap-3">
-          <div>
+      <div class="flex h-full min-h-0 flex-col">
+        <div class="flex items-center justify-between gap-3 border-b border-default p-4">
+          <div class="min-w-0">
             <p class="text-sm font-medium text-highlighted">
               Recent conversations
             </p>
-            <p class="text-xs text-muted">
+            <p class="mt-1 text-xs text-muted">
               History stays on demand so the main chat page can stay focused on the active thread.
             </p>
           </div>
@@ -50,16 +50,18 @@ const emit = defineEmits<{
           </UButton>
         </div>
 
-        <ChatSessionHistoryList
-          :groups="groups"
-          :current-session-id="currentSessionId"
-          :loading="loading"
-          :deleting-id="deletingId"
-          empty-title="No recent chats"
-          empty-description="Start a new conversation and it will appear here."
-          @select="emit('select', $event)"
-          @delete="emit('delete', $event)"
-        />
+        <div class="min-h-0 flex-1 overflow-y-auto p-4">
+          <ChatSessionHistoryList
+            :groups="groups"
+            :current-session-id="currentSessionId"
+            :loading="loading"
+            :deleting-id="deletingId"
+            empty-title="No recent chats"
+            empty-description="Start a new conversation and it will appear here."
+            @select="emit('select', $event)"
+            @delete="emit('delete', $event)"
+          />
+        </div>
       </div>
     </template>
   </USlideover>

@@ -3,7 +3,6 @@ import type { ChatViewContext } from '../composables/useGlobalChat'
 import { formatRelativeTime, truncateText } from '../utils/taskEngine'
 
 const route = useRoute()
-const scrollContainer = ref<HTMLElement | null>(null)
 const draft = ref('')
 
 const {
@@ -16,10 +15,15 @@ const {
   isLoadingSessions,
   isLoadingSession,
   isSending,
+  chatStatus,
+  queuedCount,
   initialize,
+  loadSession,
   switchSession,
-  newSession,
+  startDraftSession,
   sendMessage,
+  retryMessage,
+  stopChat,
   closeChat
 } = useGlobalChat()
 
@@ -87,6 +91,15 @@ const currentTitle = computed(() => {
 const isBusy = computed(() => isLoadingSessions.value || isLoadingSession.value)
 const isControlsDisabled = computed(() => isLoadingSession.value || isSending.value)
 
+const helperText = computed(() => {
+  if (isSending.value) {
+    return queuedCount.value
+      ? `${queuedCount.value} queued. Agent is responding.`
+      : 'Agent is responding.'
+  }
+  return 'Enter to send. Shift+Enter for a new line.'
+})
+
 async function onSessionChange(sessionId: string | number | Record<string, unknown> | null) {
   if (typeof sessionId !== 'string') {
     return
@@ -96,45 +109,35 @@ async function onSessionChange(sessionId: string | number | Record<string, unkno
 }
 
 async function startNewChat() {
-  await newSession()
+  startDraftSession()
   draft.value = ''
 }
 
-async function submitMessage() {
+async function handlePromptSubmit(event: Event) {
+  event.preventDefault()
   const outgoing = draft.value.trim()
-  if (!outgoing) {
-    return
-  }
-
+  if (!outgoing) return
   draft.value = ''
   const didSend = await sendMessage(outgoing, {
     context: currentContext.value
   })
-
   if (!didSend) {
     draft.value = outgoing
   }
 }
 
-function scrollToBottom() {
-  if (!scrollContainer.value) {
+async function retryAssistantMessage(messageId: string) {
+  await retryMessage(messageId)
+}
+
+async function retryCurrentSessionLoad() {
+  if (!currentSessionId.value) {
+    await initialize()
     return
   }
 
-  scrollContainer.value.scrollTop = scrollContainer.value.scrollHeight
+  await loadSession(currentSessionId.value)
 }
-
-watch(
-  () => [isOpen.value, messages.value.length, messages.value.at(-1)?.content, messages.value.at(-1)?.toolSteps.length],
-  async ([open]) => {
-    if (!open) {
-      return
-    }
-
-    await nextTick()
-    scrollToBottom()
-  }
-)
 
 watch(isOpen, (open) => {
   if (open) {
@@ -169,6 +172,13 @@ watch(isOpen, (open) => {
             </div>
 
             <div class="flex shrink-0 items-center gap-1">
+              <UButton
+                to="/chat/memory"
+                color="neutral"
+                variant="ghost"
+                size="sm"
+                icon="i-lucide-brain"
+              />
               <UButton
                 color="neutral"
                 variant="ghost"
@@ -214,34 +224,70 @@ watch(isOpen, (open) => {
           :description="error"
         />
 
-        <div
-          ref="scrollContainer"
-          class="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4"
+        <UChatMessages
+          should-auto-scroll
+          :status="chatStatus"
+          :spacing-offset="120"
+          class="flex-1 min-h-0"
         >
+          <template #indicator />
+
           <template v-if="isBusy && !messages.length">
-            <div class="space-y-3">
-              <div class="h-20 animate-pulse rounded-2xl bg-elevated/40" />
-              <div class="ml-auto h-16 w-[80%] animate-pulse rounded-2xl bg-primary/10" />
-              <div class="h-24 animate-pulse rounded-2xl bg-elevated/40" />
+            <div class="space-y-3 px-4 pt-4">
+              <div class="h-20 animate-pulse rounded-3xl bg-elevated/40" />
+              <div class="ml-auto h-16 w-[80%] animate-pulse rounded-3xl bg-primary/10" />
+              <div class="h-24 animate-pulse rounded-3xl bg-elevated/40" />
             </div>
           </template>
 
           <template v-else-if="messages.length">
-            <template v-for="message in messages" :key="message.id">
-              <ChatMessageUser
-                v-if="message.role === 'user'"
-                :message="message"
-              />
-              <ChatMessageAssistant
-                v-else
-                :message="message"
-              />
-            </template>
+            <div class="space-y-4 px-4">
+              <template v-for="message in messages" :key="message.id">
+                <ChatMessageUser
+                  v-if="message.role === 'user'"
+                  :message="message"
+                />
+                <ChatMessageAssistant
+                  v-else
+                  :message="message"
+                  @retry="retryAssistantMessage"
+                />
+              </template>
+            </div>
           </template>
 
           <div
+            v-else-if="error && currentSessionId && !isBusy"
+            class="mx-4 rounded-2xl border border-error/30 bg-error/5 px-4 py-5"
+          >
+            <div class="flex items-start gap-3">
+              <div class="mt-0.5 flex size-8 items-center justify-center rounded-lg bg-error/10 text-error">
+                <UIcon name="i-lucide-message-square-warning" class="size-4" />
+              </div>
+              <div class="min-w-0 flex-1">
+                <p class="text-sm font-medium text-highlighted">
+                  Could not load this conversation
+                </p>
+                <p class="mt-1 text-sm text-muted">
+                  {{ error }}
+                </p>
+                <UButton
+                  color="error"
+                  variant="soft"
+                  size="xs"
+                  icon="i-lucide-rotate-cw"
+                  class="mt-3"
+                  @click="retryCurrentSessionLoad"
+                >
+                  Retry
+                </UButton>
+              </div>
+            </div>
+          </div>
+
+          <div
             v-else
-            class="rounded-2xl border border-dashed border-default bg-elevated/20 px-4 py-5 text-sm text-muted"
+            class="mx-4 rounded-2xl border border-dashed border-default bg-elevated/20 px-4 py-5 text-sm text-muted"
           >
             <p class="font-medium text-highlighted">
               Start a conversation
@@ -250,15 +296,36 @@ watch(isOpen, (open) => {
               The assistant can look up tasks, inspect runs, search documents, manage reviews, and remember preferences for later.
             </p>
           </div>
-        </div>
+        </UChatMessages>
 
-        <ChatInput
+        <UChatPrompt
           v-model="draft"
-          :disabled="isControlsDisabled"
-          :loading="isSending"
-          :context-label="contextLabel"
-          @submit="submitMessage"
-        />
+          variant="subtle"
+          placeholder="Ask anything or give an instruction..."
+          :disabled="isLoadingSession"
+          class="rounded-b-none"
+          @submit="handlePromptSubmit"
+        >
+          <template v-if="contextLabel" #header>
+            <div class="flex items-center gap-2 text-xs text-muted">
+              <UBadge color="neutral" variant="soft" size="xs">
+                Context
+              </UBadge>
+              <span class="truncate">{{ contextLabel }}</span>
+            </div>
+          </template>
+
+          <template #footer>
+            <span class="text-[11px] text-muted">{{ helperText }}</span>
+
+            <UChatPromptSubmit
+              :status="chatStatus"
+              color="neutral"
+              size="sm"
+              @stop="stopChat"
+            />
+          </template>
+        </UChatPrompt>
       </div>
     </template>
   </USlideover>

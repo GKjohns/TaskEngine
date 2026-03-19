@@ -97,6 +97,7 @@ watch(confirmOpen, (isOpen) => {
       icon="i-lucide-search"
       color="neutral"
       variant="subtle"
+      class="w-full"
       placeholder="Search conversation history"
       autocomplete="off"
     />

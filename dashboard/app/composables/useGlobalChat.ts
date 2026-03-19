@@ -33,6 +33,11 @@ export interface ChatTextDeltaEvent {
   delta: string
 }
 
+export interface ChatReasoningDeltaEvent {
+  type: 'reasoning-delta'
+  delta: string
+}
+
 export interface ChatTitleEvent {
   type: 'title'
   title: string
@@ -48,7 +53,7 @@ export interface ChatDoneEvent {
   fullText: string
 }
 
-export type ChatStreamEvent = ChatToolCallEvent | ChatToolResultEvent | ChatTextDeltaEvent | ChatTitleEvent | ChatErrorEvent | ChatDoneEvent
+export type ChatStreamEvent = ChatToolCallEvent | ChatToolResultEvent | ChatTextDeltaEvent | ChatReasoningDeltaEvent | ChatTitleEvent | ChatErrorEvent | ChatDoneEvent
 
 export interface ChatToolStep {
   id: string
@@ -62,6 +67,7 @@ export interface ChatUiMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
+  reasoning: string
   createdAt: string
   toolSteps: ChatToolStep[]
   isStreaming: boolean
@@ -76,6 +82,11 @@ export interface ChatSessionGroup {
 
 interface ChatSessionDetail extends ChatSessionSummary {
   messages: ChatMessageRow[]
+}
+
+interface QueuedChatMessage {
+  content: string
+  context?: ChatViewContext | null
 }
 
 function makeLocalId(prefix: string) {
@@ -219,6 +230,7 @@ function toUiMessage(message: ChatMessageRow): ChatUiMessage | null {
     id: message.id,
     role: message.role,
     content: message.content || '',
+    reasoning: '',
     createdAt: message.created_at,
     toolSteps: message.role === 'assistant'
       ? normalizeToolSteps(message.tool_calls, message.tool_results)
@@ -252,6 +264,7 @@ const useSharedGlobalChat = createSharedComposable(() => {
   const isLoadingSession = useState('chat:is-loading-session', () => false)
   const isSending = useState('chat:is-sending', () => false)
   const error = useState<string | null>('chat:error', () => null)
+  const queuedMessages = useState<QueuedChatMessage[]>('chat:queued-messages', () => [])
 
   let activeRequestId = 0
   let abortController: AbortController | null = null
@@ -260,6 +273,7 @@ const useSharedGlobalChat = createSharedComposable(() => {
     return sessions.value.find(session => session.id === currentSessionId.value) || null
   })
   const groupedSessions = computed(() => groupSessions(sessions.value))
+  const queuedCount = computed(() => queuedMessages.value.length)
 
   function replaceSessions(nextSessions: ChatSessionSummary[]) {
     sessions.value = sortSessions(nextSessions)
@@ -286,9 +300,35 @@ const useSharedGlobalChat = createSharedComposable(() => {
     clearMessages()
   }
 
+  function startDraftSession() {
+    scheduleSessionSummary(currentSessionId.value)
+    abortActiveStream()
+    isSending.value = false
+    clearCurrentSession()
+    error.value = null
+  }
+
   function abortActiveStream() {
     abortController?.abort()
     abortController = null
+  }
+
+  async function requestSessionSummary(sessionId: string) {
+    try {
+      await $fetch(`/api/chat/sessions/${sessionId}/summary`, {
+        method: 'POST'
+      })
+    } catch {
+      // Summaries are best-effort background work.
+    }
+  }
+
+  function scheduleSessionSummary(sessionId: string | null | undefined) {
+    if (!import.meta.client || !sessionId || isSending.value) {
+      return
+    }
+
+    void requestSessionSummary(sessionId)
   }
 
   function updateMessage(messageId: string, updater: (message: ChatUiMessage) => void) {
@@ -369,30 +409,20 @@ const useSharedGlobalChat = createSharedComposable(() => {
       return false
     }
 
+    scheduleSessionSummary(currentSessionId.value)
     return loadSession(sessionId)
   }
 
-  async function newSession() {
-    abortActiveStream()
-    isSending.value = false
-    isLoadingSession.value = true
+  async function createSessionWithFirstMessage(message: string) {
+    const session = await $fetch<ChatSessionSummary>('/api/chat/sessions', {
+      method: 'POST',
+      body: { message }
+    })
 
-    try {
-      const session = await $fetch<ChatSessionSummary>('/api/chat/sessions', {
-        method: 'POST'
-      })
+    setCurrentSession(session)
+    error.value = null
 
-      setCurrentSession(session)
-      clearMessages()
-      error.value = null
-
-      return session
-    } catch (fetchError) {
-      error.value = fetchError instanceof Error ? fetchError.message : 'Failed to create a new chat.'
-      throw fetchError
-    } finally {
-      isLoadingSession.value = false
-    }
+    return session
   }
 
   function toggle(nextState?: boolean) {
@@ -408,6 +438,7 @@ const useSharedGlobalChat = createSharedComposable(() => {
   }
 
   function closeChat() {
+    scheduleSessionSummary(currentSessionId.value)
     toggle(false)
   }
 
@@ -476,6 +507,13 @@ const useSharedGlobalChat = createSharedComposable(() => {
       return
     }
 
+    if (event.type === 'reasoning-delta') {
+      updateMessage(messageId, (message) => {
+        message.reasoning += event.delta
+      })
+      return
+    }
+
     if (event.type === 'text-delta') {
       updateMessage(messageId, (message) => {
         message.content += event.delta
@@ -522,14 +560,41 @@ const useSharedGlobalChat = createSharedComposable(() => {
     }
   }
 
-  async function sendMessage(content: string, options?: { context?: ChatViewContext | null }) {
+  async function flushQueuedMessages() {
+    const next = queuedMessages.value.shift()
+
+    if (!next) {
+      return false
+    }
+
+    return sendMessage(next.content, {
+      context: next.context
+    })
+  }
+
+  async function sendMessage(content: string, options?: {
+    context?: ChatViewContext | null
+    retryLastUser?: boolean
+    onSessionReady?: (sessionId: string) => void | Promise<void>
+  }) {
     if (!import.meta.client) {
       return false
     }
 
     const message = content.trim()
-    if (!message || isSending.value) {
+    if (!message) {
       return false
+    }
+
+    if (isSending.value) {
+      queuedMessages.value = [
+        ...queuedMessages.value,
+        {
+          content: message,
+          context: options?.context || null
+        }
+      ]
+      return true
     }
 
     error.value = null
@@ -540,14 +605,19 @@ const useSharedGlobalChat = createSharedComposable(() => {
     let requestId = 0
 
     try {
+      let retryLastUser = Boolean(options?.retryLastUser)
+
       if (!session) {
-        session = await newSession()
+        session = await createSessionWithFirstMessage(message)
+        retryLastUser = true
+        void options?.onSessionReady?.(session.id)
       }
 
       const userMessage: ChatUiMessage = {
         id: makeLocalId('user'),
         role: 'user',
         content: message,
+        reasoning: '',
         createdAt: new Date().toISOString(),
         toolSteps: [],
         isStreaming: false,
@@ -563,6 +633,7 @@ const useSharedGlobalChat = createSharedComposable(() => {
           id: assistantMessageId,
           role: 'assistant',
           content: '',
+          reasoning: '',
           createdAt: new Date().toISOString(),
           toolSteps: [],
           isStreaming: true,
@@ -590,7 +661,8 @@ const useSharedGlobalChat = createSharedComposable(() => {
         },
         body: JSON.stringify({
           message,
-          context: options?.context || undefined
+          context: options?.context || undefined,
+          retry_last_user: retryLastUser || undefined
         }),
         signal: abortController.signal
       })
@@ -656,7 +728,50 @@ const useSharedGlobalChat = createSharedComposable(() => {
       if (!requestId || requestId === activeRequestId) {
         isSending.value = false
         abortController = null
+
+        if (queuedMessages.value.length) {
+          void flushQueuedMessages()
+        }
       }
+    }
+  }
+
+  async function retryMessage(messageId: string) {
+    const assistantIndex = messages.value.findIndex(message => message.id === messageId && message.role === 'assistant')
+
+    if (assistantIndex <= 0) {
+      return false
+    }
+
+    const previousMessage = messages.value[assistantIndex - 1]
+
+    if (!previousMessage || previousMessage.role !== 'user') {
+      return false
+    }
+
+    const nextMessages = [...messages.value]
+    nextMessages.splice(assistantIndex, 1)
+    messages.value = nextMessages
+
+    return sendMessage(previousMessage.content, {
+      retryLastUser: true
+    })
+  }
+
+  const chatStatus = computed(() => {
+    const last = messages.value.at(-1)
+    if (last?.isStreaming) return 'streaming' as const
+    if (isSending.value) return 'submitted' as const
+    return 'ready' as const
+  })
+
+  function stopChat() {
+    const lastMessage = messages.value.at(-1)
+    abortActiveStream()
+    if (lastMessage?.isStreaming) {
+      updateMessage(lastMessage.id, (msg) => {
+        msg.isStreaming = false
+      })
     }
   }
 
@@ -671,13 +786,17 @@ const useSharedGlobalChat = createSharedComposable(() => {
     isLoadingSessions,
     isLoadingSession,
     isSending,
+    chatStatus,
+    queuedCount,
     initialize,
     refreshSessions,
     loadSession,
     switchSession,
-    newSession,
     deleteSession,
+    startDraftSession,
     sendMessage,
+    retryMessage,
+    stopChat,
     toggle,
     openChat,
     closeChat
