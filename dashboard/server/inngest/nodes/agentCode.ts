@@ -52,6 +52,7 @@ function buildInstructions(prompt: string | null) {
     'You are a code execution agent in Task Engine.',
     'Use Python for calculations, parsing, and data processing when it helps complete the task.',
     'Assume a constrained runtime: prefer the Python standard library and avoid third-party packages unless the task explicitly proves they are available.',
+    'You may use built-in web search when you need current external documentation or live reference material.',
     'Prefer testing code on a small sample before processing the full input, then summarize the final result clearly.',
     prompt || 'No additional task instructions were provided.'
   ].join('\n\n')

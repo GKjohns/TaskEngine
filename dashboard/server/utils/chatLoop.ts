@@ -4,10 +4,17 @@ import type {
   ResponseCreateParamsStreaming,
   ResponseFunctionToolCall,
   ResponseInputItem,
-  ResponseOutputItem
+  ResponseOutputItem,
+  Tool
 } from 'openai/resources/responses/responses'
 import type { ChatContextMessage } from './chatContext'
 import type { ChatTool, ChatToolContext } from './chatToolTypes'
+import {
+  isWebSearchCall,
+  openAIWebSearchInclude,
+  openAIWebTools,
+  summarizeWebSearchCall
+} from './openaiWebTools'
 
 export interface ChatLoopConfig {
   openai: OpenAI
@@ -60,17 +67,19 @@ interface ResponseRoundResult {
 async function* streamResponseRound(
   config: ChatLoopConfig,
   input: ResponseInputItem[],
-  toolDefs: FunctionTool[],
+  toolDefs: Tool[],
   fullText: { value: string }
 ): AsyncGenerator<ChatEvent, ResponseRoundResult> {
   const outputItems: ResponseOutputItem[] = []
   const functionCalls: ResponseFunctionToolCall[] = []
+  const pendingWebSearches = new Set<string>()
 
   const request: ResponseCreateParamsStreaming = {
     stream: true,
     model: config.model || 'gpt-5-mini',
     instructions: config.systemPrompt,
     input,
+    include: [...openAIWebSearchInclude],
     tools: toolDefs.length ? toolDefs : undefined,
     reasoning: { summary: 'concise' },
     text: {
@@ -82,6 +91,17 @@ async function* streamResponseRound(
 
   for await (const event of stream) {
     switch (event.type) {
+      case 'response.web_search_call.in_progress':
+      case 'response.web_search_call.searching':
+        if (!pendingWebSearches.has(event.item_id)) {
+          pendingWebSearches.add(event.item_id)
+          yield {
+            type: 'tool-call',
+            name: 'web_search',
+            arguments: JSON.stringify({ status: 'searching' })
+          }
+        }
+        break
       case 'response.reasoning_summary_text.delta':
         yield { type: 'reasoning-delta', delta: event.delta }
         break
@@ -98,6 +118,12 @@ async function* streamResponseRound(
         if (isFunctionCall(event.item)) {
           functionCalls.push(event.item)
           yield { type: 'tool-call', name: event.item.name, arguments: event.item.arguments }
+        } else if (isWebSearchCall(event.item)) {
+          const webToolSummary = summarizeWebSearchCall(event.item)
+          if (!pendingWebSearches.has(event.item.id)) {
+            yield { type: 'tool-call', name: webToolSummary.name, arguments: webToolSummary.arguments }
+          }
+          yield { type: 'tool-result', name: webToolSummary.name, output: webToolSummary.output }
         }
         break
       case 'error':
@@ -113,13 +139,14 @@ async function* streamResponseRound(
 }
 
 export async function* runChatLoop(config: ChatLoopConfig): AsyncGenerator<ChatEvent> {
-  const toolDefs: FunctionTool[] = config.tools.map(tool => ({
+  const functionToolDefs: FunctionTool[] = config.tools.map(tool => ({
     type: 'function',
     name: tool.name,
     description: tool.description,
     parameters: tool.parameters,
     strict: false
   }))
+  const toolDefs: Tool[] = [...openAIWebTools, ...functionToolDefs]
 
   const fullText = { value: '' }
   let conversationInput = toInputMessages(config.messages)

@@ -21,6 +21,7 @@ const props = defineProps<{
 const expanded = ref(false)
 
 const verbMap: Record<string, string> = {
+  web_search: 'Searching web',
   list_tasks: 'Checking tasks',
   get_task: 'Opening task details',
   run_task: 'Starting task run',

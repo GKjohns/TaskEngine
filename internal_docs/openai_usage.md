@@ -13,7 +13,7 @@
 | Structured output | `response_format` | `text.format` |
 | Multi-turn | Manual — you manage the messages array yourself | `previous_response_id` or append `response.output` to input |
 | Functions | Wrapped in `{ type: "function", function: { ... } }` | Flat: `{ type: "function", name: "...", parameters: { ... } }` |
-| Built-in tools | None — you implement them yourself | `web_search_preview`, `file_search`, `code_interpreter`, etc. |
+| Built-in tools | None — you implement them yourself | `web_search`, `file_search`, `code_interpreter`, etc. |
 | Responses stored | Opt-in | Stored by default (`store: true`) |
 
 ## Models
@@ -77,7 +77,7 @@ top_p: number,        // 0–1, default 1. Nucleus sampling. Don't combine with 
 
 ```typescript
 tools: [
-  { type: "web_search_preview" },       // Built-in web search
+  { type: "web_search" },               // Built-in web search
   { type: "file_search", ... },          // Search uploaded files / vector stores
   { type: "code_interpreter" },          // Run Python code
   { type: "function", name: "...", ... } // Your custom functions
@@ -86,6 +86,10 @@ tool_choice: "auto" | "required" | "none" | { type: "function", name: "..." },
 parallel_tool_calls: boolean,  // Default: true
 max_tool_calls: number,        // Max total built-in tool calls per response
 ```
+
+`web_search` is the current generally available web tool. `web_search_preview` still exists as the older preview variant, but new work should prefer `web_search`.
+
+There is not a separate built-in `web_fetch` tool in the Responses API. On reasoning-capable models, the `web_search` tool can internally perform `search`, `open_page`, and `find_in_page` actions, which is how page fetching and in-page lookup are exposed.
 
 ### Multi-Turn Conversations
 
@@ -256,12 +260,15 @@ const openai = new OpenAI();
 
 const response = await openai.responses.create({
   model: "gpt-5.4",
-  tools: [{ type: "web_search_preview" }],
+  tools: [{ type: "web_search", search_context_size: "medium" }],
+  include: ["web_search_call.action.sources"],
   input: "What was a positive news story from today?",
 });
 
 console.log(response.output_text);
 ```
+
+For reasoning models, the web tool may emit `web_search_call` output items whose `action.type` is `search`, `open_page`, or `find_in_page`. If you need the full source list used during the search, add `include: ["web_search_call.action.sources"]`.
 
 ### Structured Output (JSON Schema)
 

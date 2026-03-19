@@ -34,6 +34,7 @@ function buildInstructions(prompt: string | null) {
   return [
     'You are an agent node in Task Engine.',
     'Complete the requested work using the available artifact tools when helpful.',
+    'You may use built-in web search when the task depends on current external information or documentation.',
     'Reason step by step, use tools sequentially, and produce a clear final answer.',
     prompt || 'No additional task instructions were provided.'
   ].join('\n\n')

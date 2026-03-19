@@ -2,9 +2,17 @@ import type {
   FunctionTool,
   ResponseCreateParamsNonStreaming,
   ResponseFunctionToolCall,
-  ResponseInputItem
+  ResponseInputItem,
+  ResponseOutputItem,
+  Tool
 } from 'openai/resources/responses/responses'
 import type { AgentTool, NodeExecutionContext } from './types'
+import {
+  isWebSearchCall,
+  openAIWebSearchInclude,
+  openAIWebTools,
+  summarizeWebSearchCall
+} from '../../utils/openaiWebTools'
 
 interface AgentLoopConfig {
   model: string
@@ -30,7 +38,7 @@ interface AgentLoopResult {
   tokens: { input: number, output: number, reasoning: number }
 }
 
-function isFunctionCall(item: { type: string }): item is ResponseFunctionToolCall {
+function isFunctionCall(item: ResponseOutputItem): item is ResponseFunctionToolCall {
   return item.type === 'function_call'
 }
 
@@ -51,13 +59,14 @@ function parseToolArguments(rawArguments: string) {
 export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentLoopResult> {
   const collectedToolCalls: AgentLoopResult['toolCalls'] = []
   const totalTokens = { input: 0, output: 0, reasoning: 0 }
-  const toolDefs: FunctionTool[] = config.tools.map(tool => ({
+  const functionToolDefs: FunctionTool[] = config.tools.map(tool => ({
     type: 'function',
     name: tool.name,
     description: tool.description,
     parameters: tool.parameters,
     strict: true
   }))
+  const toolDefs: Tool[] = [...openAIWebTools, ...functionToolDefs]
 
   let previousResponseId: string | null = null
   let iterations = 0
@@ -71,6 +80,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentLoopRe
       model: config.model,
       instructions: config.instructions,
       input: currentInput,
+      include: [...openAIWebSearchInclude],
       reasoning: config.reasoning,
       tools: toolDefs.length > 0 ? toolDefs : undefined,
       previous_response_id: previousResponseId,
@@ -84,6 +94,16 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentLoopRe
     totalTokens.input += response.usage?.input_tokens || 0
     totalTokens.output += response.usage?.output_tokens || 0
     totalTokens.reasoning += response.usage?.output_tokens_details?.reasoning_tokens || 0
+
+    for (const webCall of response.output.filter(isWebSearchCall)) {
+      const summary = summarizeWebSearchCall(webCall)
+      collectedToolCalls.push({
+        name: summary.name,
+        input: summary.arguments,
+        output: summary.output,
+        isError: summary.isError
+      })
+    }
 
     const functionCalls = response.output.filter(isFunctionCall)
 

@@ -7,7 +7,7 @@ export interface ToolEntity {
 }
 
 export interface ToolEntityDetail extends ToolEntity {
-  meta: Array<{ label: string; value: string }>
+  meta: Array<{ label: string, value: string }>
 }
 
 export interface ToolListResult {
@@ -19,6 +19,12 @@ export interface ToolRunAction {
   taskTitle: string
   runId: string
   status: string
+}
+
+export interface WebCitation {
+  url: string
+  label: string
+  domain: string
 }
 
 type BadgeColor = 'primary' | 'secondary' | 'neutral' | 'error' | 'warning' | 'info' | 'success'
@@ -46,7 +52,7 @@ function kvLines(output: string): Map<string, string> {
   return map
 }
 
-function titleAndId(value: string): { title: string; id: string } | null {
+function titleAndId(value: string): { title: string, id: string } | null {
   const match = value.match(/^(.+?)\s+\(([a-f0-9-]{36})\)/i)
   return match ? { title: match[1], id: match[2] } : null
 }
@@ -264,4 +270,50 @@ export function parseListReviews(output: string): ToolListResult | null {
   }
 
   return { count: parseInt(countMatch[1]), entities }
+}
+
+function formatCitationLabel(url: URL) {
+  const segments = url.pathname
+    .split('/')
+    .map(segment => segment.trim())
+    .filter(Boolean)
+    .slice(0, 2)
+
+  return segments.length ? `${url.hostname}/${segments.join('/')}` : url.hostname
+}
+
+export function parseWebSearchSources(output: string): WebCitation[] {
+  const match = output.match(/(?:^|\n)Sources:\n([\s\S]+)$/)
+  if (!match?.[1]) {
+    return []
+  }
+
+  const citations: WebCitation[] = []
+  const seen = new Set<string>()
+
+  for (const rawLine of match[1].split('\n')) {
+    const line = rawLine.trim()
+    if (!line.startsWith('- ')) {
+      continue
+    }
+
+    const urlText = line.slice(2).trim()
+    if (!urlText || seen.has(urlText)) {
+      continue
+    }
+
+    try {
+      const parsed = new URL(urlText)
+      seen.add(urlText)
+      citations.push({
+        url: urlText,
+        domain: parsed.hostname,
+        label: formatCitationLabel(parsed)
+      })
+    } catch {
+      continue
+    }
+  }
+
+  return citations
 }

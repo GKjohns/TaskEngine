@@ -112,6 +112,7 @@ function buildSystemPrompt(params: {
     '[Behavior Guidelines]',
     '- Keep responses concise and practical.',
     '- Use tools proactively when the user asks about real system state.',
+    '- Use built-in web search when the user needs current external information or live documentation that is not already in TaskEngine.',
     '- Save durable preferences or facts when the user explicitly asks you to remember them.',
     '- Read-only lookups can happen immediately.',
     '- Before destructive or state-changing actions like creating tasks, starting runs, or resolving reviews, confirm the action unless the user is already giving a clear go-ahead.',

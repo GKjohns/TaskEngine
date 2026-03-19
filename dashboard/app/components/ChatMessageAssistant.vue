@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ChatUiMessage } from '../composables/useGlobalChat'
+import { parseWebSearchSources } from '../utils/chatToolParsers'
 import { formatRelativeTime } from '../utils/taskEngine'
 
 const props = defineProps<{
@@ -11,6 +12,12 @@ const reasoningOpen = ref(false)
 
 const hasContent = computed(() => Boolean(props.message.content.trim()))
 const hasReasoning = computed(() => Boolean(props.message.reasoning.trim()))
+const citations = computed(() => {
+  return props.message.toolSteps
+    .filter(step => step.name === 'web_search' && Boolean(step.output))
+    .flatMap(step => parseWebSearchSources(step.output || ''))
+    .filter((citation, index, items) => items.findIndex(item => item.url === citation.url) === index)
+})
 
 watch(() => props.message.reasoning, (val) => {
   if (val && !hasContent.value && props.message.isStreaming) {
@@ -77,6 +84,11 @@ async function copyMessage() {
         v-if="hasContent"
         :content="message.content"
         surface="plain"
+      />
+
+      <ChatMessageCitations
+        v-if="citations.length"
+        :citations="citations"
       />
 
       <div
