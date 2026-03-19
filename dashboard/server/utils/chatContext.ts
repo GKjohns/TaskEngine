@@ -120,6 +120,54 @@ function buildSystemPrompt(params: {
   ].join('\n')
 }
 
+function summarizeToolCalls(toolCalls: unknown[], toolResults: unknown[]): string {
+  if (!Array.isArray(toolCalls) || toolCalls.length === 0) {
+    return ''
+  }
+
+  const results = Array.isArray(toolResults) ? toolResults : []
+
+  const lines = toolCalls.map((call, index) => {
+    if (!call || typeof call !== 'object') return null
+    const record = call as Record<string, unknown>
+    const name = typeof record.name === 'string' ? record.name : 'unknown'
+    const args = typeof record.arguments === 'string' ? record.arguments : ''
+
+    const matchingResult = results[index] as Record<string, unknown> | undefined
+    const output = matchingResult && typeof matchingResult.output === 'string'
+      ? matchingResult.output
+      : null
+
+    const truncatedOutput = output && output.length > 300
+      ? output.slice(0, 297) + '...'
+      : output
+
+    return truncatedOutput
+      ? `- ${name}(${args}) → ${truncatedOutput}`
+      : `- ${name}(${args})`
+  }).filter(Boolean)
+
+  return lines.length > 0
+    ? `[Tool calls in this turn]\n${lines.join('\n')}`
+    : ''
+}
+
+function enrichAssistantContent(
+  content: string,
+  toolCalls: unknown[],
+  toolResults: unknown[]
+): string {
+  const toolSummary = summarizeToolCalls(toolCalls, toolResults)
+
+  if (!toolSummary) {
+    return content
+  }
+
+  return content
+    ? `${toolSummary}\n\n${content}`
+    : toolSummary
+}
+
 function estimateTokens(systemPrompt: string, messages: ChatContextMessage[]) {
   const totalChars = systemPrompt.length + messages.reduce((sum, message) => sum + message.content.length, 0)
   return Math.ceil(totalChars / 4)
@@ -182,7 +230,7 @@ export async function assembleChatContext(
       : Promise.resolve({ data: [], error: null }),
     supabase
       .from('chat_messages')
-      .select('role, content')
+      .select('role, content, tool_calls, tool_results')
       .eq('session_id', sessionId)
       .eq('is_compacted', false)
       .order('created_at', { ascending: true })
@@ -211,10 +259,13 @@ export async function assembleChatContext(
 
   const messages = (messagesResult.data || [])
     .filter(message => message.role === 'user' || message.role === 'assistant' || message.role === 'system')
-    .map(message => ({
-      role: message.role,
-      content: message.content
-    })) as ChatContextMessage[]
+    .map((message) => {
+      const content = message.role === 'assistant'
+        ? enrichAssistantContent(message.content, message.tool_calls, message.tool_results)
+        : message.content
+
+      return { role: message.role, content }
+    }) as ChatContextMessage[]
 
   const systemPrompt = buildSystemPrompt({
     memories: (memoriesResult.data || []) as Database['public']['Tables']['memories']['Row'][],

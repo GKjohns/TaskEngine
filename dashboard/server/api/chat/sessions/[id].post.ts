@@ -11,6 +11,7 @@ import { createServiceClient } from '../../../utils/supabase'
 
 const sendMessageSchema = z.object({
   message: z.string().trim().min(1),
+  retry_last_user: z.boolean().optional(),
   context: z.object({
     kind: z.enum(['task', 'artifact', 'run', 'page']),
     label: z.string().trim().min(1).max(120),
@@ -106,6 +107,19 @@ async function maybeGenerateTitle(params: {
   return title
 }
 
+function deriveFallbackTitle(message: string) {
+  const normalized = message
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[.!?]+$/, '')
+
+  if (!normalized) {
+    return 'Untitled conversation'
+  }
+
+  return normalized.slice(0, 80)
+}
+
 export default defineEventHandler(async (event) => {
   const sessionId = getRouterParam(event, 'id')
 
@@ -122,22 +136,49 @@ export default defineEventHandler(async (event) => {
   const userId = await getRequestUserId(event)
   const session = await getScopedSession(client, sessionId, userId)
 
-  const { error: userInsertError } = await client
-    .from('chat_messages')
-    .insert({
-      session_id: sessionId,
-      role: 'user',
-      content: body.message
-    })
+  let shouldInsertUserMessage = true
 
-  if (userInsertError) {
-    throw createError({
-      statusCode: 500,
-      statusMessage: userInsertError.message
-    })
+  if (body.retry_last_user) {
+    const { data: lastMessage, error: lastMessageError } = await client
+      .from('chat_messages')
+      .select('role, content')
+      .eq('session_id', sessionId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (lastMessageError) {
+      throw createError({
+        statusCode: 500,
+        statusMessage: lastMessageError.message
+      })
+    }
+
+    if (lastMessage?.role === 'user' && lastMessage.content.trim() === body.message.trim()) {
+      shouldInsertUserMessage = false
+    }
   }
 
-  await touchSession(client, sessionId)
+  if (shouldInsertUserMessage) {
+    const { error: userInsertError } = await client
+      .from('chat_messages')
+      .insert({
+        session_id: sessionId,
+        role: 'user',
+        content: body.message
+      })
+
+    if (userInsertError) {
+      throw createError({
+        statusCode: 500,
+        statusMessage: userInsertError.message
+      })
+    }
+  }
+
+  await touchSession(client, sessionId, session.title
+    ? {}
+    : { title: deriveFallbackTitle(body.message) })
 
   let context = await assembleChatContext(client, sessionId, userId, body.context || null)
 
@@ -200,7 +241,7 @@ export default defineEventHandler(async (event) => {
         await stream.push(JSON.stringify(chatEvent))
       }
 
-      if (finalText.trim()) {
+      if (finalText.trim() || toolCalls.length > 0) {
         const { error: assistantInsertError } = await client
           .from('chat_messages')
           .insert({
@@ -221,7 +262,7 @@ export default defineEventHandler(async (event) => {
         await touchSession(client, sessionId)
       }
 
-      if (!session.title && finalText.trim()) {
+      if (!session.title && (finalText.trim() || toolCalls.length > 0)) {
         const title = await maybeGenerateTitle({
           client,
           openai,

@@ -198,6 +198,56 @@ const response = await openai.responses.create({
 console.log(response.output);
 ```
 
+### Streaming Reasoning Summary
+
+When streaming, reasoning summary text arrives via dedicated events *before* the visible output text. This lets you show a "thinking" indicator with live content while the model reasons, reducing perceived latency.
+
+Enable it by setting `reasoning.summary` (to `"auto"`, `"concise"`, or `"detailed"`) alongside `stream: true`:
+
+```typescript
+import OpenAI from "openai";
+const openai = new OpenAI();
+
+const stream = await openai.responses.create({
+  model: "gpt-5-mini",
+  instructions: "You are a helpful assistant.",
+  input: "What is the tallest mountain on each continent?",
+  stream: true,
+  reasoning: {
+    summary: "concise",
+  },
+});
+
+for await (const event of stream) {
+  switch (event.type) {
+    case "response.reasoning_summary_text.delta":
+      // Fires token-by-token while the model is still reasoning.
+      // event.delta contains the incremental text.
+      process.stdout.write(`[thinking] ${event.delta}`);
+      break;
+    case "response.reasoning_summary_text.done":
+      // Fires once when the reasoning summary is complete.
+      // event.text contains the full summary.
+      console.log("\n[thinking done]");
+      break;
+    case "response.output_text.delta":
+      // Normal visible output text, arrives after reasoning finishes.
+      process.stdout.write(event.delta);
+      break;
+  }
+}
+```
+
+The event sequence during a streamed reasoning response is:
+
+1. `response.reasoning_summary_part.added` — a reasoning summary block is starting
+2. `response.reasoning_summary_text.delta` (repeated) — incremental summary text
+3. `response.reasoning_summary_text.done` — summary complete
+4. `response.reasoning_summary_part.done` — summary block complete
+5. `response.output_text.delta` (repeated) — the visible assistant response
+
+> **Tip:** Use `"concise"` for chat-style UIs where the summary is a brief "thinking" preview. Use `"detailed"` when the reasoning trace itself is valuable (debugging, transparency). `"auto"` lets the model decide.
+
 ### Web Search
 
 ```typescript

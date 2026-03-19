@@ -20,6 +20,7 @@ export interface ChatLoopConfig {
 }
 
 export type ChatEvent = { type: 'text-delta', delta: string }
+  | { type: 'reasoning-delta', delta: string }
   | { type: 'tool-call', name: string, arguments: string }
   | { type: 'tool-result', name: string, output: string }
   | { type: 'error', message: string }
@@ -51,13 +52,17 @@ function parseToolArguments(rawArguments: string) {
   return parsed as Record<string, unknown>
 }
 
-async function collectResponseRound(
+interface ResponseRoundResult {
+  outputItems: ResponseOutputItem[]
+  functionCalls: ResponseFunctionToolCall[]
+}
+
+async function* streamResponseRound(
   config: ChatLoopConfig,
   input: ResponseInputItem[],
   toolDefs: FunctionTool[],
-  fullText: { value: string },
-  emit: (event: ChatEvent) => Promise<void>
-) {
+  fullText: { value: string }
+): AsyncGenerator<ChatEvent, ResponseRoundResult> {
   const outputItems: ResponseOutputItem[] = []
   const functionCalls: ResponseFunctionToolCall[] = []
 
@@ -67,6 +72,7 @@ async function collectResponseRound(
     instructions: config.systemPrompt,
     input,
     tools: toolDefs.length ? toolDefs : undefined,
+    reasoning: { summary: 'concise' },
     text: {
       verbosity: 'low'
     }
@@ -76,23 +82,22 @@ async function collectResponseRound(
 
   for await (const event of stream) {
     switch (event.type) {
+      case 'response.reasoning_summary_text.delta':
+        yield { type: 'reasoning-delta', delta: event.delta }
+        break
+      case 'response.reasoning_summary_text.done':
+        yield { type: 'reasoning-delta', delta: '\n' }
+        break
       case 'response.output_text.delta':
         fullText.value += event.delta
-        await emit({
-          type: 'text-delta',
-          delta: event.delta
-        })
+        yield { type: 'text-delta', delta: event.delta }
         break
       case 'response.output_item.done':
         outputItems.push(event.item)
 
         if (isFunctionCall(event.item)) {
           functionCalls.push(event.item)
-          await emit({
-            type: 'tool-call',
-            name: event.item.name,
-            arguments: event.item.arguments
-          })
+          yield { type: 'tool-call', name: event.item.name, arguments: event.item.arguments }
         }
         break
       case 'error':
@@ -104,10 +109,7 @@ async function collectResponseRound(
     }
   }
 
-  return {
-    outputItems,
-    functionCalls
-  }
+  return { outputItems, functionCalls }
 }
 
 export async function* runChatLoop(config: ChatLoopConfig): AsyncGenerator<ChatEvent> {
@@ -125,16 +127,7 @@ export async function* runChatLoop(config: ChatLoopConfig): AsyncGenerator<ChatE
 
   try {
     for (let toolRound = 0; toolRound < maxToolRounds; toolRound++) {
-      const emittedEvents: ChatEvent[] = []
-      const emit = async (event: ChatEvent) => {
-        emittedEvents.push(event)
-      }
-
-      const round = await collectResponseRound(config, conversationInput, toolDefs, fullText, emit)
-
-      for (const event of emittedEvents) {
-        yield event
-      }
+      const round = yield* streamResponseRound(config, conversationInput, toolDefs, fullText)
 
       conversationInput = [...conversationInput, ...round.outputItems]
 

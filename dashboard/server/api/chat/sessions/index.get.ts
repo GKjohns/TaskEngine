@@ -31,10 +31,30 @@ export default defineEventHandler(async (event) => {
     return sessions
   }
 
+  const { data: messageRows, error: messageError } = await client
+    .from('chat_messages')
+    .select('session_id')
+    .in('session_id', sessionIds)
+
+  if (messageError) {
+    throw createError({
+      statusCode: 500,
+      statusMessage: messageError.message
+    })
+  }
+
+  const sessionsWithMessages = new Set((messageRows || []).map(row => row.session_id))
+  const visibleSessions = sessions.filter(session => sessionsWithMessages.has(session.id))
+  const visibleSessionIds = visibleSessions.map(session => session.id)
+
+  if (!visibleSessionIds.length) {
+    return []
+  }
+
   const { data: summaryRows, error: summaryError } = await client
     .from('session_summaries')
     .select('session_id, summary, created_at')
-    .in('session_id', sessionIds)
+    .in('session_id', visibleSessionIds)
     .order('created_at', { ascending: false })
 
   if (summaryError) {
@@ -52,7 +72,7 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  return sessions.map(session => ({
+  return visibleSessions.map(session => ({
     ...session,
     summary: summariesBySession.get(session.id) || null
   }))
