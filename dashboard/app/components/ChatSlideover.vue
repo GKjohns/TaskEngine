@@ -154,13 +154,13 @@ watch(isOpen, (open) => {
     description="Ask about tasks, activity, reviews, and documents from anywhere in the dashboard."
     :close="false"
     :ui="{
-      content: 'w-full sm:max-w-[420px] p-0',
+      content: 'h-full w-full sm:max-w-[420px] p-0',
       body: 'p-0'
     }"
   >
     <template #content>
-      <div class="flex h-full min-h-0 flex-col bg-default">
-        <header class="border-b border-default px-4 py-4">
+      <div class="flex h-full min-h-0 flex-col overflow-hidden bg-default">
+        <header class="shrink-0 border-b border-default px-4 py-4">
           <div class="flex items-start gap-3">
             <div class="min-w-0 flex-1">
               <p class="truncate text-sm font-semibold text-highlighted">
@@ -215,95 +215,97 @@ watch(isOpen, (open) => {
           </div>
         </header>
 
-        <UAlert
-          v-if="error"
-          color="error"
-          variant="soft"
-          class="mx-4 mt-4"
-          title="Chat unavailable"
-          :description="error"
-        />
+        <div class="min-h-0 flex-1 overflow-hidden">
+          <UAlert
+            v-if="error"
+            color="error"
+            variant="soft"
+            class="mx-4 mt-4 shrink-0"
+            title="Chat unavailable"
+            :description="error"
+          />
 
-        <UChatMessages
-          should-auto-scroll
-          :status="chatStatus"
-          :spacing-offset="120"
-          class="flex-1 min-h-0"
-        >
-          <template #indicator />
-
-          <template v-if="isBusy && !messages.length">
-            <div class="space-y-3 px-4 pt-4">
-              <div class="h-20 animate-pulse rounded-3xl bg-elevated/40" />
-              <div class="ml-auto h-16 w-[80%] animate-pulse rounded-3xl bg-primary/10" />
-              <div class="h-24 animate-pulse rounded-3xl bg-elevated/40" />
-            </div>
-          </template>
-
-          <template v-else-if="messages.length">
-            <div class="space-y-4 px-4">
-              <template v-for="message in messages" :key="message.id">
-                <ChatMessageUser
-                  v-if="message.role === 'user'"
-                  :message="message"
-                />
-                <ChatMessageAssistant
-                  v-else
-                  :message="message"
-                  @retry="retryAssistantMessage"
-                />
-              </template>
-            </div>
-          </template>
-
-          <div
-            v-else-if="error && currentSessionId && !isBusy"
-            class="mx-4 rounded-2xl border border-error/30 bg-error/5 px-4 py-5"
+          <UChatMessages
+            should-auto-scroll
+            :status="chatStatus"
+            :spacing-offset="120"
+            class="h-full min-h-0 overflow-y-auto"
           >
-            <div class="flex items-start gap-3">
-              <div class="mt-0.5 flex size-8 items-center justify-center rounded-lg bg-error/10 text-error">
-                <UIcon name="i-lucide-message-square-warning" class="size-4" />
+            <template #indicator />
+
+            <template v-if="isBusy && !messages.length">
+              <div class="space-y-3 px-4 pt-4">
+                <div class="h-20 animate-pulse rounded-3xl bg-elevated/40" />
+                <div class="ml-auto h-16 w-[80%] animate-pulse rounded-3xl bg-primary/10" />
+                <div class="h-24 animate-pulse rounded-3xl bg-elevated/40" />
               </div>
-              <div class="min-w-0 flex-1">
-                <p class="text-sm font-medium text-highlighted">
-                  Could not load this conversation
-                </p>
-                <p class="mt-1 text-sm text-muted">
-                  {{ error }}
-                </p>
-                <UButton
-                  color="error"
-                  variant="soft"
-                  size="xs"
-                  icon="i-lucide-rotate-cw"
-                  class="mt-3"
-                  @click="retryCurrentSessionLoad"
-                >
-                  Retry
-                </UButton>
+            </template>
+
+            <template v-else-if="messages.length">
+              <div class="space-y-4 px-4 py-4">
+                <template v-for="message in messages" :key="message.id">
+                  <ChatMessageUser
+                    v-if="message.role === 'user'"
+                    :message="message"
+                  />
+                  <ChatMessageAssistant
+                    v-else
+                    :message="message"
+                    @retry="retryAssistantMessage"
+                  />
+                </template>
+              </div>
+            </template>
+
+            <div
+              v-else-if="error && currentSessionId && !isBusy"
+              class="mx-4 mt-4 rounded-2xl border border-error/30 bg-error/5 px-4 py-5"
+            >
+              <div class="flex items-start gap-3">
+                <div class="mt-0.5 flex size-8 items-center justify-center rounded-lg bg-error/10 text-error">
+                  <UIcon name="i-lucide-message-square-warning" class="size-4" />
+                </div>
+                <div class="min-w-0 flex-1">
+                  <p class="text-sm font-medium text-highlighted">
+                    Could not load this conversation
+                  </p>
+                  <p class="mt-1 text-sm text-muted">
+                    {{ error }}
+                  </p>
+                  <UButton
+                    color="error"
+                    variant="soft"
+                    size="xs"
+                    icon="i-lucide-rotate-cw"
+                    class="mt-3"
+                    @click="retryCurrentSessionLoad"
+                  >
+                    Retry
+                  </UButton>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div
-            v-else
-            class="mx-4 rounded-2xl border border-dashed border-default bg-elevated/20 px-4 py-5 text-sm text-muted"
-          >
-            <p class="font-medium text-highlighted">
-              Start a conversation
-            </p>
-            <p class="mt-2">
-              The assistant can look up tasks, inspect runs, search documents, manage reviews, and remember preferences for later.
-            </p>
-          </div>
-        </UChatMessages>
+            <div
+              v-else
+              class="mx-4 mt-4 rounded-2xl border border-dashed border-default bg-elevated/20 px-4 py-5 text-sm text-muted"
+            >
+              <p class="font-medium text-highlighted">
+                Start a conversation
+              </p>
+              <p class="mt-2">
+                The assistant can look up tasks, inspect runs, search documents, manage reviews, and remember preferences for later.
+              </p>
+            </div>
+          </UChatMessages>
+        </div>
 
         <UChatPrompt
           v-model="draft"
           variant="subtle"
           placeholder="Ask anything or give an instruction..."
           :disabled="isLoadingSession"
-          class="rounded-b-none"
+          class="shrink-0 rounded-b-none"
           @submit="handlePromptSubmit"
         >
           <template v-if="contextLabel" #header>

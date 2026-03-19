@@ -50,7 +50,10 @@ const emit = defineEmits<{
           </UButton>
         </div>
 
-        <div class="min-h-0 flex-1 overflow-y-auto p-4">
+        <UScrollArea
+          class="min-h-0 flex-1"
+          :ui="{ viewport: 'flex-col px-4 py-5' }"
+        >
           <ChatSessionHistoryList
             :groups="groups"
             :current-session-id="currentSessionId"
@@ -61,7 +64,7 @@ const emit = defineEmits<{
             @select="emit('select', $event)"
             @delete="emit('delete', $event)"
           />
-        </div>
+        </UScrollArea>
       </div>
     </template>
   </USlideover>

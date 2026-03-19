@@ -422,7 +422,10 @@ watch(
               </span>
             </div>
 
-            <div class="xl:max-h-[420px] xl:overflow-y-auto xl:pr-1">
+            <UScrollArea
+              class="min-h-0 max-h-[420px]"
+              :ui="{ viewport: 'flex-col py-2 pr-1' }"
+            >
               <ChatSessionHistoryList
                 :groups="groupedSessions"
                 :current-session-id="currentSessionId"
@@ -433,7 +436,7 @@ watch(
                 @select="handleSelectSession"
                 @delete="handleDeleteSession"
               />
-            </div>
+            </UScrollArea>
           </div>
         </div>
       </div>
